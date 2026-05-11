@@ -28,7 +28,7 @@ SSE_READLINE_TIMEOUT_SECONDS = 30.0
 SSE_STALE_THRESHOLD_SECONDS = 75.0
 SSE_PERIODIC_RESYNC_SECONDS = 300.0
 
-PLATFORMS: list[str] = ["sensor", "binary_sensor", "button", "event"]
+PLATFORMS: list[str] = ["sensor", "binary_sensor", "button", "camera", "event"]
 
 SERVICE_REFRESH = "refresh"
 SERVICE_CALL_ANSWER = "call_answer"
