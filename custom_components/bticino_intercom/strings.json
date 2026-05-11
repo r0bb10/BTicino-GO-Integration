@@ -11,12 +11,28 @@
           "verify_ssl": "Verify SSL",
           "request_timeout_sec": "Request timeout (seconds)"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate BTicino Companion",
+        "description": "Companion rejected the stored credentials. Provide an access token or claim code to reconnect.",
+        "data": {
+          "access_token": "Access token",
+          "claim_code": "Claim code"
+        }
       }
+    },
+    "abort": {
+      "wrong_device": "Credentials belong to a different companion device"
     },
     "error": {
       "cannot_connect": "Cannot connect to companion",
       "invalid_auth": "Authentication failed",
       "invalid_claim_code": "Claim code is required or invalid",
+      "invalid_challenge": "Companion challenge is invalid or expired",
+      "already_claimed": "Companion is already claimed",
+      "pairing_locked": "Pairing is temporarily locked, try again later",
+      "repair_code_invalid": "Repair code is invalid or expired",
+      "repair_not_allowed": "Claim reset is not currently allowed",
       "invalid_url": "Companion URL is invalid"
     }
   },
@@ -36,6 +52,37 @@
       "cannot_connect": "Cannot connect to companion",
       "invalid_auth": "Authentication failed",
       "invalid_url": "Companion URL is invalid"
+    }
+  },
+  "issues": {
+    "claim_recovery": {
+      "title": "Companion credentials need recovery",
+      "description": "The companion rejected the stored credentials for this config entry. Start repair to reset claim state and generate fresh credentials."
+    }
+  },
+  "repair_flow": {
+    "claim_recovery": {
+      "step": {
+        "confirm": {
+          "title": "Recover Companion Claim",
+          "description": "This will issue a temporary repair code, reset claim state, and request a new access token from the companion."
+        }
+      },
+      "abort": {
+        "entry_missing": "Config entry is missing"
+      },
+      "error": {
+        "cannot_connect": "Cannot connect to companion",
+        "invalid_auth": "Authentication failed",
+        "pairing_locked": "Pairing is temporarily locked, try again later",
+        "repair_code_invalid": "Repair code is invalid or expired",
+        "repair_not_allowed": "Claim reset is not currently allowed",
+        "invalid_claim_code": "Claim code is required or invalid",
+        "invalid_challenge": "Companion challenge is invalid or expired"
+      },
+      "create_entry": {
+        "default": "Companion claim recovery completed"
+      }
     }
   }
 }

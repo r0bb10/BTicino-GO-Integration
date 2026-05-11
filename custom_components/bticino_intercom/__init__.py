@@ -9,8 +9,9 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import issue_registry as ir
 
 from .api import CompanionApiClient, CompanionApiError
 from .const import (
@@ -24,6 +25,7 @@ from .const import (
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    ISSUE_CLAIM_RECOVERY,
     PLATFORMS,
     SERVICE_CALL_ANSWER,
     SERVICE_CALL_HANGUP,
@@ -62,7 +64,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up BTicino v2 from a config entry."""
+    """Set up BTicino from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
     client = CompanionApiClient(
@@ -73,12 +75,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         request_timeout=float(_entry_value(entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT)),
     )
     coordinator = CompanionCoordinator(hass, client)
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryAuthFailed:
+        _ensure_claim_recovery_issue(hass, entry.entry_id)
+        raise
+    except Exception as err:  # noqa: BLE001
+        raise ConfigEntryNotReady(str(err)) from err
+
     await coordinator.async_start_event_stream()
 
     runtime = IntegrationRuntime(client=client, coordinator=coordinator)
     entry.runtime_data = runtime
     hass.data[DOMAIN][entry.entry_id] = runtime
+    _delete_claim_recovery_issue(hass, entry.entry_id)
 
     await _async_register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -110,6 +120,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     runtime = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if isinstance(runtime, IntegrationRuntime):
+        _delete_claim_recovery_issue(hass, entry.entry_id)
         await runtime.coordinator.async_stop_event_stream()
 
     if not hass.data.get(DOMAIN):
@@ -226,3 +237,25 @@ async def _async_unregister_services(hass: HomeAssistant) -> None:
             hass.services.async_remove(DOMAIN, service)
 
     hass.data.pop(DATA_SERVICES_REGISTERED, None)
+
+
+def _claim_recovery_issue_id(entry_id: str) -> str:
+    return f"{ISSUE_CLAIM_RECOVERY}_{entry_id}"
+
+
+def _ensure_claim_recovery_issue(hass: HomeAssistant, entry_id: str) -> None:
+    hass.add_job(
+        ir.async_create_issue,
+        hass,
+        DOMAIN,
+        _claim_recovery_issue_id(entry_id),
+        is_fixable=True,
+        is_persistent=True,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_CLAIM_RECOVERY,
+        data={"entry_id": entry_id},
+    )
+
+
+def _delete_claim_recovery_issue(hass: HomeAssistant, entry_id: str) -> None:
+    hass.add_job(ir.async_delete_issue, hass, DOMAIN, _claim_recovery_issue_id(entry_id))

@@ -9,6 +9,7 @@ NAME = "BTicino Intercom"
 
 CONF_COMPANION_URL = "companion_url"
 CONF_ACCESS_TOKEN = "access_token"
+CONF_KEY_ID = "key_id"
 CONF_CLAIM_CODE = "claim_code"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_REQUEST_TIMEOUT = "request_timeout_sec"
@@ -33,3 +34,4 @@ SERVICE_ENTRYPOINT_STREAM_START = "entrypoint_stream_start"
 SERVICE_ENTRYPOINT_STREAM_STOP = "entrypoint_stream_stop"
 
 DATA_SERVICES_REGISTERED = f"{DOMAIN}_services_registered"
+ISSUE_CLAIM_RECOVERY = "claim_recovery"

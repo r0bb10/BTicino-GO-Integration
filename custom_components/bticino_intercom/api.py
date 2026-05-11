@@ -91,6 +91,20 @@ class CompanionApiClient:
         }
         return await self._async_request("POST", "/api/v2/pair/claim", auth=False, json_body=payload)
 
+    async def async_auth_rotate(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/auth/rotate", auth=True)
+
+    async def async_auth_revoke(self, *, key_id: str) -> dict[str, Any]:
+        payload = {"key_id": key_id}
+        return await self._async_request("POST", "/api/v2/auth/revoke", auth=True, json_body=payload)
+
+    async def async_issue_repair_code(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/admin/issue-repair-code", auth=True)
+
+    async def async_reset_claim(self, repair_code: str) -> dict[str, Any]:
+        payload = {"repair_code": repair_code}
+        return await self._async_request("POST", "/api/v2/admin/reset-claim", auth=True, json_body=payload)
+
     async def async_get_state(self) -> dict[str, Any]:
         return await self._async_request("GET", "/api/v2/state", auth=True)
 

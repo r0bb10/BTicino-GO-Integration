@@ -78,7 +78,7 @@ async def async_setup_entry(
 
 
 class CompanionSensorEntity(CoordinatorEntity[CompanionCoordinator], SensorEntity):
-    """Coordinator-backed BTicino v2 sensor."""
+    """Coordinator-backed BTicino sensor."""
 
     _attr_has_entity_name = True
 
