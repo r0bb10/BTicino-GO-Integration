@@ -16,8 +16,11 @@ from .api import CompanionApiClient, CompanionApiError, CompanionAuthError
 from .config_flow import _map_error
 from .const import (
     CONF_ACCESS_TOKEN,
+    CONF_ACCESS_TOKEN_EXPIRES_AT,
     CONF_COMPANION_URL,
     CONF_KEY_ID,
+    CONF_REFRESH_TOKEN,
+    CONF_REFRESH_TOKEN_EXPIRES_AT,
     CONF_REQUEST_TIMEOUT,
     CONF_VERIFY_SSL,
     DEFAULT_COMPANION_URL,
@@ -75,6 +78,9 @@ class ClaimRecoveryRepairFlow(RepairsFlow):
                 )
                 new_token = str(claim.get("access_token", "")).strip()
                 new_key_id = str(claim.get("key_id", "")).strip()
+                new_refresh_token = str(claim.get("refresh_token", "")).strip()
+                new_access_expires = str(claim.get("access_token_expires_at", "")).strip()
+                new_refresh_expires = str(claim.get("refresh_token_expires_at", "")).strip()
                 if not new_token:
                     raise CompanionApiError("Companion did not return an access token during re-claim")
             except CompanionAuthError:
@@ -85,6 +91,9 @@ class ClaimRecoveryRepairFlow(RepairsFlow):
                 updated_data = dict(entry.data)
                 updated_data[CONF_ACCESS_TOKEN] = new_token
                 updated_data[CONF_KEY_ID] = new_key_id
+                updated_data[CONF_REFRESH_TOKEN] = new_refresh_token
+                updated_data[CONF_ACCESS_TOKEN_EXPIRES_AT] = new_access_expires
+                updated_data[CONF_REFRESH_TOKEN_EXPIRES_AT] = new_refresh_expires
                 self.hass.config_entries.async_update_entry(entry, data=updated_data)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_create_entry(title="", data={})
@@ -107,12 +116,20 @@ async def async_create_fix_flow(
 def _build_client(hass: HomeAssistant, entry: ConfigEntry) -> CompanionApiClient:
     companion_url = str(_entry_value(entry, CONF_COMPANION_URL, DEFAULT_COMPANION_URL))
     access_token = str(_entry_value(entry, CONF_ACCESS_TOKEN, ""))
+    key_id = str(_entry_value(entry, CONF_KEY_ID, ""))
+    refresh_token = str(_entry_value(entry, CONF_REFRESH_TOKEN, ""))
+    access_expires = str(_entry_value(entry, CONF_ACCESS_TOKEN_EXPIRES_AT, ""))
+    refresh_expires = str(_entry_value(entry, CONF_REFRESH_TOKEN_EXPIRES_AT, ""))
     verify_ssl = bool(_entry_value(entry, CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
     timeout = float(_entry_value(entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT))
     return CompanionApiClient(
         session=async_get_clientsession(hass),
         base_url=companion_url,
         access_token=access_token,
+        key_id=key_id,
+        refresh_token=refresh_token,
+        access_token_expires_at=access_expires,
+        refresh_token_expires_at=refresh_expires,
         verify_ssl=verify_ssl,
         request_timeout=timeout,
     )

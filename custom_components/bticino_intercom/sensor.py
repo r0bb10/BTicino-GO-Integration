@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
@@ -18,12 +18,8 @@ from .const import DOMAIN, NAME
 from .coordinator import CompanionCoordinator
 
 
-@dataclass(frozen=True, slots=True)
-class CompanionSensorDescription:
-    key: str
-    name: str
-    icon: str
-    entity_category: EntityCategory | None
+@dataclass(frozen=True, kw_only=True)
+class CompanionSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any], CompanionCoordinator], Any]
     strict_availability: bool = True
 
@@ -33,33 +29,78 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         key="call_state",
         name="Call State",
         icon="mdi:phone",
-        entity_category=None,
         value_fn=lambda data, _: data.get("state", {}).get("call_state", "unknown"),
     ),
     CompanionSensorDescription(
         key="active_entrypoint",
         name="Active Entrypoint",
         icon="mdi:map-marker-path",
-        entity_category=None,
         value_fn=lambda data, _: data.get("state", {}).get("active_entrypoint"),
     ),
     CompanionSensorDescription(
-        key="entrypoints_count",
-        name="Entrypoints Count",
-        icon="mdi:door",
+        key="network_ip",
+        name="IP Address",
+        icon="mdi:ip-network",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data, _: len(data.get("entrypoints", {}).get("entrypoints", [])),
+        value_fn=lambda data, _: _network_value(data, "ip"),
         strict_availability=False,
     ),
     CompanionSensorDescription(
-        key="sse_last_event_id",
-        name="SSE Last Event ID",
-        icon="mdi:counter",
+        key="network_mac",
+        name="Mac Address",
+        icon="mdi:identifier",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda _data, coordinator: coordinator.last_event_id,
+        value_fn=lambda data, _: _network_value(data, "mac"),
+        strict_availability=False,
+    ),
+    CompanionSensorDescription(
+        key="network_wifi_rssi",
+        name="WiFi dB",
+        icon="mdi:wifi",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement="dBm",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, _: _wifi_rssi(data),
+        strict_availability=False,
+    ),
+    CompanionSensorDescription(
+        key="network_wifi_signal",
+        name="WiFi Signal",
+        icon="mdi:wifi-strength-3",
+        native_unit_of_measurement="%",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, _: _wifi_signal_percent(data),
         strict_availability=False,
     ),
 )
+
+
+def _network_value(data: dict[str, Any], key: str) -> str | None:
+    state = data.get("state", {}) if isinstance(data, dict) else {}
+    diagnostics = state.get("diagnostics", {}) if isinstance(state, dict) else {}
+    network = diagnostics.get("network", {}) if isinstance(diagnostics, dict) else {}
+    value = str(network.get(key, "")).strip() if isinstance(network, dict) else ""
+    return value or None
+
+
+def _wifi_rssi(data: dict[str, Any]) -> int | None:
+    state = data.get("state", {}) if isinstance(data, dict) else {}
+    diagnostics = state.get("diagnostics", {}) if isinstance(state, dict) else {}
+    network = diagnostics.get("network", {}) if isinstance(diagnostics, dict) else {}
+    if not isinstance(network, dict):
+        return None
+    value = network.get("wifi_rssi")
+    if isinstance(value, (int, float)):
+        return int(value)
+    return None
+
+
+def _wifi_signal_percent(data: dict[str, Any]) -> int | None:
+    rssi = _wifi_rssi(data)
+    if rssi is None:
+        return None
+    # Map common WiFi RSSI range [-100, -50] dBm to [0, 100] percent.
+    return max(0, min(100, 2 * (rssi + 100)))
 
 
 async def async_setup_entry(
@@ -98,11 +139,16 @@ class CompanionSensorEntity(CoordinatorEntity[CompanionCoordinator], SensorEntit
 
     @property
     def device_info(self) -> DeviceInfo:
+        state = self.coordinator.data.get("state", {}) if isinstance(self.coordinator.data, dict) else {}
+        device = state.get("device", {}) if isinstance(state, dict) else {}
+        model = str(device.get("model", "")).strip() or "Companion"
+        firmware = str(device.get("firmware", "")).strip() or None
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
             name=NAME,
             manufacturer="BTicino",
-            model="Companion",
+            model=model,
+            sw_version=firmware,
         )
 
     @property
@@ -114,7 +160,7 @@ class CompanionSensorEntity(CoordinatorEntity[CompanionCoordinator], SensorEntit
         auth = self.coordinator.data.get("auth", {}) if isinstance(self.coordinator.data, dict) else {}
         if isinstance(auth, dict) and auth.get("needs_claim"):
             return False
-        return not self.coordinator.sse_stale
+        return True
 
     @property
     def native_value(self) -> Any:

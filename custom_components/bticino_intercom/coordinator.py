@@ -19,6 +19,7 @@ from .const import (
     COMMAND_TIMEOUT_SECONDS,
     COORDINATOR_UPDATE_INTERVAL,
     DOMAIN,
+    SSE_PERIODIC_RESYNC_SECONDS,
     SSE_READLINE_TIMEOUT_SECONDS,
     SSE_STALE_THRESHOLD_SECONDS,
 )
@@ -45,6 +46,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._sse_connected = False
         self._sse_last_error: str | None = None
         self._sse_last_activity = 0.0
+        self._sse_last_resync = 0.0
         self._last_event_id = 0
 
     @property
@@ -123,6 +125,9 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return result
 
     async def _async_update_data(self) -> dict[str, Any]:
+        if not self._sse_stop.is_set() and (self._sse_task is None or self._sse_task.done()):
+            await self.async_start_event_stream()
+
         try:
             health = await self.client.async_get_health()
 
@@ -171,7 +176,9 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 self._sse_connected = True
                 self._sse_last_error = None
-                self._sse_last_activity = time.monotonic()
+                now = time.monotonic()
+                self._sse_last_activity = now
+                self._sse_last_resync = now
                 self._publish_runtime_state()
 
                 reconnect_delay = 1.0
@@ -223,6 +230,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 now = time.monotonic()
                 if self._sse_last_activity > 0 and (now - self._sse_last_activity) >= SSE_STALE_THRESHOLD_SECONDS:
                     raise ClientPayloadError("SSE stream became stale") from err
+
+                if self._sse_last_resync <= 0 or (now - self._sse_last_resync) >= SSE_PERIODIC_RESYNC_SECONDS:
+                    self._sse_last_resync = now
+                    await self.async_request_refresh()
                 continue
 
             if raw_line == b"":
@@ -360,4 +371,13 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         err = task.exception()
         if err is not None:
+            self._sse_connected = False
+            self._sse_last_error = f"event stream task exited with error: {err}"
             _LOGGER.warning("Companion SSE task exited with error: %s", err)
+            self._publish_runtime_state()
+            return
+
+        self._sse_connected = False
+        self._sse_last_error = "event stream task exited unexpectedly"
+        self._publish_runtime_state()
+        _LOGGER.warning("Companion SSE task exited unexpectedly")

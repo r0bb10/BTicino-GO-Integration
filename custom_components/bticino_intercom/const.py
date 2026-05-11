@@ -9,7 +9,10 @@ NAME = "BTicino Intercom"
 
 CONF_COMPANION_URL = "companion_url"
 CONF_ACCESS_TOKEN = "access_token"
+CONF_REFRESH_TOKEN = "refresh_token"
 CONF_KEY_ID = "key_id"
+CONF_ACCESS_TOKEN_EXPIRES_AT = "access_token_expires_at"
+CONF_REFRESH_TOKEN_EXPIRES_AT = "refresh_token_expires_at"
 CONF_CLAIM_CODE = "claim_code"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_REQUEST_TIMEOUT = "request_timeout_sec"
@@ -22,9 +25,10 @@ DEFAULT_REQUEST_TIMEOUT = 8.0
 COORDINATOR_UPDATE_INTERVAL = timedelta(seconds=20)
 COMMAND_TIMEOUT_SECONDS = 8.0
 SSE_READLINE_TIMEOUT_SECONDS = 30.0
-SSE_STALE_THRESHOLD_SECONDS = 45.0
+SSE_STALE_THRESHOLD_SECONDS = 75.0
+SSE_PERIODIC_RESYNC_SECONDS = 300.0
 
-PLATFORMS: list[str] = ["sensor", "binary_sensor"]
+PLATFORMS: list[str] = ["sensor", "binary_sensor", "button", "event"]
 
 SERVICE_REFRESH = "refresh"
 SERVICE_CALL_ANSWER = "call_answer"
@@ -35,3 +39,5 @@ SERVICE_ENTRYPOINT_STREAM_STOP = "entrypoint_stream_stop"
 
 DATA_SERVICES_REGISTERED = f"{DOMAIN}_services_registered"
 ISSUE_CLAIM_RECOVERY = "claim_recovery"
+EVENT_OPENWEBNET_FRAME = "bticino_intercom_openwebnet_frame"
+SIGNAL_OPENWEBNET_TRACE = f"{DOMAIN}_openwebnet_trace"

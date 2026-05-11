@@ -15,9 +15,13 @@ from homeassistant.helpers import issue_registry as ir
 
 from .api import CompanionApiClient, CompanionApiError
 from .const import (
+    CONF_ACCESS_TOKEN_EXPIRES_AT,
     CONF_ACCESS_TOKEN,
     CONF_COMPANION_URL,
+    CONF_KEY_ID,
     CONF_REQUEST_TIMEOUT,
+    CONF_REFRESH_TOKEN,
+    CONF_REFRESH_TOKEN_EXPIRES_AT,
     CONF_VERIFY_SSL,
     DATA_SERVICES_REGISTERED,
     DEFAULT_ACCESS_TOKEN,
@@ -35,6 +39,7 @@ from .const import (
     SERVICE_REFRESH,
 )
 from .coordinator import CompanionCoordinator
+from .trace_relay import OpenWebNetTraceRelay
 
 
 @dataclass(slots=True)
@@ -43,6 +48,7 @@ class IntegrationRuntime:
 
     client: CompanionApiClient
     coordinator: CompanionCoordinator
+    trace_relay: OpenWebNetTraceRelay
 
 
 SERVICE_SCHEMA_ENTRY = vol.Schema({vol.Optional("entry_id"): str})
@@ -67,12 +73,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up BTicino from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
+    async def _async_persist_auth_state(auth_state: dict[str, str]) -> None:
+        updates = {
+            CONF_ACCESS_TOKEN: auth_state.get("access_token", ""),
+            CONF_REFRESH_TOKEN: auth_state.get("refresh_token", ""),
+            CONF_KEY_ID: auth_state.get("key_id", ""),
+            CONF_ACCESS_TOKEN_EXPIRES_AT: auth_state.get("access_token_expires_at", ""),
+            CONF_REFRESH_TOKEN_EXPIRES_AT: auth_state.get("refresh_token_expires_at", ""),
+        }
+        merged = dict(entry.data)
+        changed = False
+        for key, value in updates.items():
+            if value and str(merged.get(key, "")).strip() != value:
+                merged[key] = value
+                changed = True
+        if changed:
+            hass.config_entries.async_update_entry(entry, data=merged)
+
     client = CompanionApiClient(
         session=async_get_clientsession(hass),
         base_url=str(_entry_value(entry, CONF_COMPANION_URL, DEFAULT_COMPANION_URL)),
         access_token=str(_entry_value(entry, CONF_ACCESS_TOKEN, DEFAULT_ACCESS_TOKEN)),
+        key_id=str(_entry_value(entry, CONF_KEY_ID, "")),
+        refresh_token=str(_entry_value(entry, CONF_REFRESH_TOKEN, "")),
+        access_token_expires_at=str(_entry_value(entry, CONF_ACCESS_TOKEN_EXPIRES_AT, "")),
+        refresh_token_expires_at=str(_entry_value(entry, CONF_REFRESH_TOKEN_EXPIRES_AT, "")),
         verify_ssl=bool(_entry_value(entry, CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)),
         request_timeout=float(_entry_value(entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT)),
+        auth_state_listener=_async_persist_auth_state,
     )
     coordinator = CompanionCoordinator(hass, client)
     try:
@@ -85,7 +113,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_start_event_stream()
 
-    runtime = IntegrationRuntime(client=client, coordinator=coordinator)
+    trace_relay = OpenWebNetTraceRelay(hass, client, entry.entry_id)
+    await trace_relay.async_start()
+
+    runtime = IntegrationRuntime(client=client, coordinator=coordinator, trace_relay=trace_relay)
     entry.runtime_data = runtime
     hass.data[DOMAIN][entry.entry_id] = runtime
     _delete_claim_recovery_issue(hass, entry.entry_id)
@@ -107,9 +138,14 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
         access_token=str(_entry_value(entry, CONF_ACCESS_TOKEN, DEFAULT_ACCESS_TOKEN)),
         verify_ssl=bool(_entry_value(entry, CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)),
         request_timeout=float(_entry_value(entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT)),
+        key_id=str(_entry_value(entry, CONF_KEY_ID, "")),
+        refresh_token=str(_entry_value(entry, CONF_REFRESH_TOKEN, "")),
+        access_token_expires_at=str(_entry_value(entry, CONF_ACCESS_TOKEN_EXPIRES_AT, "")),
+        refresh_token_expires_at=str(_entry_value(entry, CONF_REFRESH_TOKEN_EXPIRES_AT, "")),
     )
     await runtime.coordinator.async_request_refresh()
     await runtime.coordinator.async_restart_event_stream()
+    await runtime.trace_relay.async_restart()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -122,6 +158,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if isinstance(runtime, IntegrationRuntime):
         _delete_claim_recovery_issue(hass, entry.entry_id)
         await runtime.coordinator.async_stop_event_stream()
+        await runtime.trace_relay.async_stop()
 
     if not hass.data.get(DOMAIN):
         await _async_unregister_services(hass)
