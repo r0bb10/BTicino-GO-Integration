@@ -1,0 +1,83 @@
+refresh:
+  name: Refresh
+  description: Force a full snapshot refresh from Companion.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+
+call_answer:
+  name: Call answer
+  description: Trigger call answer on Companion.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+
+call_hangup:
+  name: Call hangup
+  description: Trigger call hangup on Companion.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+
+entrypoint_unlock:
+  name: Entrypoint unlock
+  description: Trigger unlock on a specific entrypoint.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+    entrypoint_id:
+      name: Entrypoint ID
+      description: Entrypoint id from Companion.
+      required: true
+      selector:
+        text:
+
+entrypoint_stream_start:
+  name: Entrypoint stream start
+  description: Start stream for a specific entrypoint.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+    entrypoint_id:
+      name: Entrypoint ID
+      description: Entrypoint id from Companion.
+      required: true
+      selector:
+        text:
+
+entrypoint_stream_stop:
+  name: Entrypoint stream stop
+  description: Stop stream for a specific entrypoint.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+    entrypoint_id:
+      name: Entrypoint ID
+      description: Entrypoint id from Companion.
+      required: true
+      selector:
+        text:

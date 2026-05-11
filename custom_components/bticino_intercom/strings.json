@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BTicino Companion",
+        "description": "Connect Home Assistant to Companion",
+        "data": {
+          "companion_url": "Companion URL",
+          "access_token": "Access token",
+          "claim_code": "Claim code",
+          "verify_ssl": "Verify SSL",
+          "request_timeout_sec": "Request timeout (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to companion",
+      "invalid_auth": "Authentication failed",
+      "invalid_claim_code": "Claim code is required or invalid",
+      "invalid_url": "Companion URL is invalid"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "companion_url": "Companion URL",
+          "access_token": "Access token",
+          "verify_ssl": "Verify SSL",
+          "request_timeout_sec": "Request timeout (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to companion",
+      "invalid_auth": "Authentication failed",
+      "invalid_url": "Companion URL is invalid"
+    }
+  }
+}
