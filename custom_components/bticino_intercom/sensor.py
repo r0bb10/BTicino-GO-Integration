@@ -35,7 +35,7 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         key="active_entrypoint",
         name="Active Entrypoint",
         icon="mdi:map-marker-path",
-        value_fn=lambda data, _: data.get("state", {}).get("active_entrypoint"),
+        value_fn=lambda data, _: _active_entrypoint_value(data),
     ),
     CompanionSensorDescription(
         key="network_ip",
@@ -73,6 +73,14 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         strict_availability=False,
     ),
 )
+
+
+def _active_entrypoint_value(data: dict[str, Any]) -> str:
+    state = data.get("state", {}) if isinstance(data, dict) else {}
+    value = state.get("active_entrypoint") if isinstance(state, dict) else None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return "none"
 
 
 def _network_value(data: dict[str, Any], key: str) -> str | None:

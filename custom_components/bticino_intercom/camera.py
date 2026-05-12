@@ -13,7 +13,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
-from .api import CompanionApiClient
 from .const import CONF_COMPANION_URL, DEFAULT_COMPANION_URL, DOMAIN, NAME
 from .coordinator import CompanionCoordinator
 
@@ -28,8 +27,6 @@ async def async_setup_entry(
 ) -> None:
     runtime: IntegrationRuntime = entry.runtime_data
     coordinator = runtime.coordinator
-    client = runtime.client
-
     known_entrypoint_ids: set[str] = set()
 
     def _sync_entrypoint_cameras() -> None:
@@ -57,7 +54,6 @@ async def async_setup_entry(
                 CompanionEntrypointCamera(
                     entry=entry,
                     coordinator=coordinator,
-                    client=client,
                     entrypoint_id=entrypoint_id,
                     entrypoint_label=entrypoint_label,
                     devaddr=devaddr,
@@ -83,7 +79,6 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
         *,
         entry: ConfigEntry,
         coordinator: CompanionCoordinator,
-        client: CompanionApiClient,
         entrypoint_id: str,
         entrypoint_label: str,
         devaddr: str | None,
@@ -91,12 +86,12 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
         Camera.__init__(self)
         CoordinatorEntity.__init__(self, coordinator)
         self._entry = entry
-        self._client = client
         self._entrypoint_id = entrypoint_id
         self._devaddr = devaddr
         self._companion_url = str(entry.options.get(CONF_COMPANION_URL, entry.data.get(CONF_COMPANION_URL, DEFAULT_COMPANION_URL))).strip()
         self._attr_name = entrypoint_label
         self._attr_unique_id = f"{entry.entry_id}_entrypoint_camera_{entrypoint_id}"
+        self.stream_options["rtsp_transport"] = "tcp"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -137,14 +132,13 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
         return attrs
 
     async def stream_source(self) -> str | None:
-        await self.coordinator.async_run_command(
-            label=f"Entrypoint stream start ({self._entrypoint_id})",
-            command_coro_factory=lambda: self._client.async_entrypoint_stream_start(self._entrypoint_id),
-        )
-        return _build_rtsp_stream_url(self._companion_url, self.coordinator.data)
+        return _build_rtsp_stream_url(self._companion_url, self.coordinator.data, self._entrypoint_id)
+
+    async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
+        return None
 
 
-def _build_rtsp_stream_url(companion_url: str, data: dict[str, Any] | None) -> str | None:
+def _build_rtsp_stream_url(companion_url: str, data: dict[str, Any] | None, entrypoint_id: str) -> str | None:
     payload = data if isinstance(data, dict) else {}
     state = payload.get("state", {}) if isinstance(payload, dict) else {}
 
@@ -162,4 +156,27 @@ def _build_rtsp_stream_url(companion_url: str, data: dict[str, Any] | None) -> s
         return None
 
     host_for_url = f"[{host}]" if ":" in host and not host.startswith("[") else host
-    return f"rtsp://{host_for_url}:{_DEFAULT_RTSP_PORT}/{_DEFAULT_RTSP_PATH}"
+    token = _sanitize_path_token(entrypoint_id)
+    if not token:
+        return None
+    stream_path = f"{_DEFAULT_RTSP_PATH}-{token}"
+    return f"rtsp://{host_for_url}:{_DEFAULT_RTSP_PORT}/{stream_path}"
+
+
+def _sanitize_path_token(raw: str) -> str:
+    value = str(raw).strip().lower()
+    if not value:
+        return ""
+
+    chars: list[str] = []
+    last_dash = False
+    for ch in value:
+        if "a" <= ch <= "z" or "0" <= ch <= "9" or ch in ("-", "_"):
+            chars.append(ch)
+            last_dash = False
+            continue
+        if not last_dash:
+            chars.append("-")
+            last_dash = True
+
+    return "".join(chars).strip("-")

@@ -298,8 +298,8 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._apply_state_transition(state, event_type)
 
         entrypoint_id = event.get("entrypoint_id")
-        if isinstance(entrypoint_id, str) and entrypoint_id.strip():
-            state["active_entrypoint"] = entrypoint_id.strip()
+        if isinstance(event_type, str):
+            self._apply_active_entrypoint_transition(state, event_type, entrypoint_id)
 
         existing["state"] = state
         existing["last_event"] = event
@@ -344,6 +344,35 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             state["stream_active"] = False
             state["call_state"] = "ringing" if ringing else "idle"
             return
+
+    @staticmethod
+    def _apply_active_entrypoint_transition(
+        state: dict[str, Any],
+        event_type: str,
+        entrypoint_id: Any,
+    ) -> None:
+        normalized = ""
+        if isinstance(entrypoint_id, str):
+            normalized = entrypoint_id.strip()
+
+        if event_type in ("ring.started", "call.incoming", "call.view_requested", "stream.started"):
+            if normalized and normalized != "floor":
+                state["active_entrypoint"] = normalized
+            return
+
+        if event_type == "ring.ended":
+            if not bool(state.get("stream_active")):
+                state["active_entrypoint"] = None
+            return
+
+        if event_type == "stream.stopped":
+            if not bool(state.get("ringing")):
+                state["active_entrypoint"] = None
+            return
+
+        if event_type == "call.ended":
+            if not bool(state.get("stream_active")) and not bool(state.get("ringing")):
+                state["active_entrypoint"] = None
 
     def _runtime_snapshot(self) -> dict[str, Any]:
         age_sec: float | None = None
