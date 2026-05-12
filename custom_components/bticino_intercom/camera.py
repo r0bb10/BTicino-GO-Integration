@@ -109,10 +109,7 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
 
     @property
     def available(self) -> bool:
-        if not self.coordinator.last_update_success:
-            return False
-        auth = self.coordinator.data.get("auth", {}) if isinstance(self.coordinator.data, dict) else {}
-        return not bool((auth if isinstance(auth, dict) else {}).get("needs_claim"))
+        return self.coordinator.entities_available
 
     @property
     def is_streaming(self) -> bool:

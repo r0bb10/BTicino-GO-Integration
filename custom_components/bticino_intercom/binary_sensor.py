@@ -35,8 +35,7 @@ SENSORS: tuple[CompanionBinarySensorDescription, ...] = (
         icon="mdi:lan-connect",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data, coordinator: coordinator.last_update_success
-        and not bool((data.get("auth", {}) if isinstance(data, dict) else {}).get("needs_claim")),
+        value_fn=lambda _data, coordinator: coordinator.connected,
         strict_availability=False,
     ),
     CompanionBinarySensorDescription(
@@ -100,12 +99,7 @@ class CompanionBinarySensorEntity(CoordinatorEntity[CompanionCoordinator], Binar
     def available(self) -> bool:
         if not self.entity_description.strict_availability:
             return True
-        if not super().available:
-            return False
-        auth = self.coordinator.data.get("auth", {}) if isinstance(self.coordinator.data, dict) else {}
-        if isinstance(auth, dict) and auth.get("needs_claim"):
-            return False
-        return True
+        return self.coordinator.entities_available
 
     @property
     def is_on(self) -> bool:

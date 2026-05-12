@@ -43,7 +43,6 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         icon="mdi:ip-network",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data, _: _network_value(data, "ip"),
-        strict_availability=False,
     ),
     CompanionSensorDescription(
         key="network_mac",
@@ -61,7 +60,6 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         native_unit_of_measurement="dBm",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data, _: _wifi_rssi(data),
-        strict_availability=False,
     ),
     CompanionSensorDescription(
         key="network_wifi_signal",
@@ -70,7 +68,6 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         native_unit_of_measurement="%",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data, _: _wifi_signal_percent(data),
-        strict_availability=False,
     ),
 )
 
@@ -163,12 +160,7 @@ class CompanionSensorEntity(CoordinatorEntity[CompanionCoordinator], SensorEntit
     def available(self) -> bool:
         if not self.entity_description.strict_availability:
             return True
-        if not super().available:
-            return False
-        auth = self.coordinator.data.get("auth", {}) if isinstance(self.coordinator.data, dict) else {}
-        if isinstance(auth, dict) and auth.get("needs_claim"):
-            return False
-        return True
+        return self.coordinator.entities_available
 
     @property
     def native_value(self) -> Any:

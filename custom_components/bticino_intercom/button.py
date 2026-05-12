@@ -103,10 +103,7 @@ class CompanionEntrypointUnlockButton(CoordinatorEntity[CompanionCoordinator], B
 
     @property
     def available(self) -> bool:
-        if not self.coordinator.last_update_success:
-            return False
-        auth = self.coordinator.data.get("auth", {}) if isinstance(self.coordinator.data, dict) else {}
-        return not bool((auth if isinstance(auth, dict) else {}).get("needs_claim"))
+        return self.coordinator.entities_available
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

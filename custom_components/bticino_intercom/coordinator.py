@@ -48,6 +48,11 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._sse_last_activity = 0.0
         self._sse_last_resync = 0.0
         self._last_event_id = 0
+        self._connected = False
+
+    @property
+    def connected(self) -> bool:
+        return self._connected
 
     @property
     def sse_connected(self) -> bool:
@@ -68,6 +73,16 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._sse_last_activity <= 0:
             return True
         return (time.monotonic() - self._sse_last_activity) >= SSE_STALE_THRESHOLD_SECONDS
+
+    @property
+    def needs_claim(self) -> bool:
+        data = self.data if isinstance(self.data, dict) else {}
+        auth = data.get("auth", {}) if isinstance(data, dict) else {}
+        return bool((auth if isinstance(auth, dict) else {}).get("needs_claim"))
+
+    @property
+    def entities_available(self) -> bool:
+        return self.connected and not self.needs_claim
 
     async def async_start_event_stream(self) -> None:
         """Start background SSE task if not already running."""
@@ -99,6 +114,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._sse_connected = False
         self._sse_last_error = "event stream stopped"
+        self._connected = False
         self._publish_runtime_state()
 
     async def async_restart_event_stream(self) -> None:
@@ -150,8 +166,11 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except CompanionAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except CompanionApiError as err:
+            self._set_connected(False)
+            self._publish_runtime_state()
             raise UpdateFailed(str(err)) from err
 
+        self._connected = True
         existing = self.data if isinstance(self.data, dict) else {}
         runtime = self._runtime_snapshot()
 
@@ -179,6 +198,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 now = time.monotonic()
                 self._sse_last_activity = now
                 self._sse_last_resync = now
+                self._connected = True
                 self._publish_runtime_state()
 
                 reconnect_delay = 1.0
@@ -188,12 +208,14 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except CompanionAuthError as err:
                 self._sse_connected = False
                 self._sse_last_error = str(err)
+                self._set_connected(False)
                 self._publish_runtime_state()
                 await self.async_request_refresh()
                 await self._async_wait_or_stop(10.0)
             except (CompanionApiError, ClientConnectionError, ClientPayloadError, OSError) as err:
                 self._sse_connected = False
                 self._sse_last_error = str(err)
+                self._set_connected(False)
                 self._publish_runtime_state()
                 await self.async_request_refresh()
                 await self._async_wait_or_stop(reconnect_delay)
@@ -201,6 +223,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception as err:  # noqa: BLE001
                 self._sse_connected = False
                 self._sse_last_error = f"event stream crashed: {err}"
+                self._set_connected(False)
                 self._publish_runtime_state()
                 _LOGGER.warning("Companion SSE loop crashed, retrying: %s", err, exc_info=True)
                 await self.async_request_refresh()
@@ -380,6 +403,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             age_sec = max(0.0, time.monotonic() - self._sse_last_activity)
 
         return {
+            "connected": self._connected,
             "sse_connected": self._sse_connected,
             "sse_last_error": self._sse_last_error,
             "sse_last_event_id": self._last_event_id,
@@ -387,6 +411,11 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "sse_stale": self.sse_stale,
             "updated_at": datetime.now(UTC).isoformat(),
         }
+
+    def _set_connected(self, connected: bool) -> None:
+        if self._connected == connected:
+            return
+        self._connected = connected
 
     def _publish_runtime_state(self) -> None:
         if not isinstance(self.data, dict):
@@ -402,11 +431,13 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if err is not None:
             self._sse_connected = False
             self._sse_last_error = f"event stream task exited with error: {err}"
+            self._set_connected(False)
             _LOGGER.warning("Companion SSE task exited with error: %s", err)
             self._publish_runtime_state()
             return
 
         self._sse_connected = False
         self._sse_last_error = "event stream task exited unexpectedly"
+        self._set_connected(False)
         self._publish_runtime_state()
         _LOGGER.warning("Companion SSE task exited unexpectedly")

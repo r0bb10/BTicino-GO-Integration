@@ -11,9 +11,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
 from .const import DOMAIN, NAME
+from .coordinator import CompanionCoordinator
 from .trace_relay import trace_signal
 
 _EVENT_TYPES = ["rx", "tx", "info", "error", "unknown"]
@@ -28,7 +30,7 @@ async def async_setup_entry(
     async_add_entities([CompanionOpenWebNetTraceEvent(runtime, entry)])
 
 
-class CompanionOpenWebNetTraceEvent(EventEntity):
+class CompanionOpenWebNetTraceEvent(CoordinatorEntity[CompanionCoordinator], EventEntity):
     """Event entity carrying last OpenWebNet trace frame."""
 
     _attr_has_entity_name = True
@@ -43,6 +45,7 @@ class CompanionOpenWebNetTraceEvent(EventEntity):
         runtime: IntegrationRuntime,
         entry: ConfigEntry,
     ) -> None:
+        super().__init__(runtime.coordinator)
         self.runtime = runtime
         self.coordinator = runtime.coordinator
         self._entry = entry
@@ -67,7 +70,7 @@ class CompanionOpenWebNetTraceEvent(EventEntity):
 
     @property
     def available(self) -> bool:
-        return True
+        return self.coordinator.entities_available
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
