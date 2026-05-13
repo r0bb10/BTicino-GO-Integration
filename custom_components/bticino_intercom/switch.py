@@ -24,7 +24,24 @@ async def async_setup_entry(
     runtime: IntegrationRuntime = entry.runtime_data
     coordinator = runtime.coordinator
     client = runtime.client
-    async_add_entities([CompanionMuteSwitch(entry, coordinator, client)])
+    entities: list[SwitchEntity] = [CompanionMuteSwitch(entry, coordinator, client)]
+    if _supports_voicemail(coordinator):
+        entities.append(CompanionVoicemailSwitch(entry, coordinator, client))
+    async_add_entities(entities)
+
+
+def _supports_voicemail(coordinator: CompanionCoordinator) -> bool:
+    data = coordinator.data if isinstance(coordinator.data, dict) else {}
+    state = data.get("state", {}) if isinstance(data, dict) else {}
+    device = state.get("device", {}) if isinstance(state, dict) else {}
+    model = str(device.get("model", "")).strip().upper()
+    if model == "C100X":
+        return False
+    capabilities = data.get("capabilities", {}) if isinstance(data, dict) else {}
+    cap_list = capabilities.get("capabilities", []) if isinstance(capabilities, dict) else []
+    if isinstance(cap_list, list) and cap_list:
+        return "control_voicemail_v2" in set(str(cap).strip() for cap in cap_list if isinstance(cap, str))
+    return True
 
 
 class CompanionMuteSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity):
@@ -82,4 +99,62 @@ class CompanionMuteSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity)
         await self.coordinator.async_run_command(
             label="Unmute",
             command_coro_factory=self._client.async_audio_unmute,
+        )
+
+
+class CompanionVoicemailSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity):
+    """Voicemail switch backed by companion voicemail controls."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Voicemail"
+    _attr_icon = "mdi:voicemail"
+
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        coordinator: CompanionCoordinator,
+        client,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._client = client
+        self._attr_unique_id = f"{entry.entry_id}_voicemail"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        state = self.coordinator.data.get("state", {}) if isinstance(self.coordinator.data, dict) else {}
+        device = state.get("device", {}) if isinstance(state, dict) else {}
+        model = str(device.get("model", "")).strip() or "Companion"
+        firmware = str(device.get("firmware", "")).strip() or None
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
+            name=NAME,
+            manufacturer="BTicino",
+            model=model,
+            sw_version=firmware,
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.entities_available and _supports_voicemail(self.coordinator)
+
+    @property
+    def is_on(self) -> bool:
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        state = data.get("state", {}) if isinstance(data, dict) else {}
+        voicemail = state.get("voicemail", {}) if isinstance(state, dict) else {}
+        return bool((voicemail if isinstance(voicemail, dict) else {}).get("enabled", False))
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        del kwargs
+        await self.coordinator.async_run_command(
+            label="Voicemail enable",
+            command_coro_factory=self._client.async_voicemail_enable,
+        )
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        del kwargs
+        await self.coordinator.async_run_command(
+            label="Voicemail disable",
+            command_coro_factory=self._client.async_voicemail_disable,
         )

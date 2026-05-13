@@ -174,6 +174,12 @@ class CompanionApiClient:
     async def async_audio_unmute(self) -> dict[str, Any]:
         return await self._async_request("POST", "/api/v2/control/audio/unmute", auth=True)
 
+    async def async_voicemail_enable(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/control/voicemail/enable", auth=True)
+
+    async def async_voicemail_disable(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/control/voicemail/disable", auth=True)
+
     async def async_entrypoint_unlock(self, entrypoint_id: str) -> dict[str, Any]:
         return await self._async_request(
             "POST",

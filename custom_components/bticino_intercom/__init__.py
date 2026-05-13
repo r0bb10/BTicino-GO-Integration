@@ -35,6 +35,8 @@ from .const import (
     SERVICE_CALL_HANGUP,
     SERVICE_AUDIO_MUTE,
     SERVICE_AUDIO_UNMUTE,
+    SERVICE_VOICEMAIL_ENABLE,
+    SERVICE_VOICEMAIL_DISABLE,
     SERVICE_ENTRYPOINT_STREAM_START,
     SERVICE_ENTRYPOINT_STREAM_STOP,
     SERVICE_ENTRYPOINT_UNLOCK,
@@ -216,6 +218,14 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         runtime = await _resolve_runtime(call)
         await _run_command("Audio unmute", call, runtime.client.async_audio_unmute)
 
+    async def _handle_voicemail_enable(call: ServiceCall) -> None:
+        runtime = await _resolve_runtime(call)
+        await _run_command("Voicemail enable", call, runtime.client.async_voicemail_enable)
+
+    async def _handle_voicemail_disable(call: ServiceCall) -> None:
+        runtime = await _resolve_runtime(call)
+        await _run_command("Voicemail disable", call, runtime.client.async_voicemail_disable)
+
     async def _handle_entrypoint_unlock(call: ServiceCall) -> None:
         runtime = await _resolve_runtime(call)
         entrypoint_id = str(call.data["entrypoint_id"]).strip()
@@ -249,6 +259,12 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_AUDIO_MUTE, _handle_audio_mute, schema=SERVICE_SCHEMA_ENTRY)
     hass.services.async_register(DOMAIN, SERVICE_AUDIO_UNMUTE, _handle_audio_unmute, schema=SERVICE_SCHEMA_ENTRY)
     hass.services.async_register(
+        DOMAIN, SERVICE_VOICEMAIL_ENABLE, _handle_voicemail_enable, schema=SERVICE_SCHEMA_ENTRY
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_VOICEMAIL_DISABLE, _handle_voicemail_disable, schema=SERVICE_SCHEMA_ENTRY
+    )
+    hass.services.async_register(
         DOMAIN,
         SERVICE_ENTRYPOINT_UNLOCK,
         _handle_entrypoint_unlock,
@@ -280,6 +296,8 @@ async def _async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_CALL_HANGUP,
         SERVICE_AUDIO_MUTE,
         SERVICE_AUDIO_UNMUTE,
+        SERVICE_VOICEMAIL_ENABLE,
+        SERVICE_VOICEMAIL_DISABLE,
         SERVICE_ENTRYPOINT_UNLOCK,
         SERVICE_ENTRYPOINT_STREAM_START,
         SERVICE_ENTRYPOINT_STREAM_STOP,

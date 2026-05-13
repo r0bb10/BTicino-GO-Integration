@@ -327,7 +327,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         event_type = event.get("type")
         if isinstance(event_type, str):
-            self._apply_state_transition(state, event_type)
+            self._apply_state_transition(state, event_type, event.get("payload"))
 
         entrypoint_id = event.get("entrypoint_id")
         if isinstance(event_type, str):
@@ -340,7 +340,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data(existing)
 
     @staticmethod
-    def _apply_state_transition(state: dict[str, Any], event_type: str) -> None:
+    def _apply_state_transition(state: dict[str, Any], event_type: str, payload: Any = None) -> None:
         stream_active = bool(state.get("stream_active"))
         ringing = bool(state.get("ringing"))
         audio = state.get("audio")
@@ -387,6 +387,23 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if event_type == "audio.unmuted":
             audio["muted"] = False
+            return
+
+        voicemail = state.get("voicemail")
+        if not isinstance(voicemail, dict):
+            voicemail = {"enabled": False, "welcome_message_enabled": False}
+            state["voicemail"] = voicemail
+
+        if event_type == "voicemail.enabled":
+            voicemail["enabled"] = True
+            if isinstance(payload, dict) and "welcome_message_enabled" in payload:
+                voicemail["welcome_message_enabled"] = bool(payload.get("welcome_message_enabled", False))
+            return
+
+        if event_type == "voicemail.disabled":
+            voicemail["enabled"] = False
+            if isinstance(payload, dict) and "welcome_message_enabled" in payload:
+                voicemail["welcome_message_enabled"] = bool(payload.get("welcome_message_enabled", False))
             return
 
     @staticmethod
@@ -483,5 +500,12 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             audio = {}
         normalized["audio"] = {
             "muted": bool(audio.get("muted", False)),
+        }
+        voicemail = normalized.get("voicemail")
+        if not isinstance(voicemail, dict):
+            voicemail = {}
+        normalized["voicemail"] = {
+            "enabled": bool(voicemail.get("enabled", False)),
+            "welcome_message_enabled": bool(voicemail.get("welcome_message_enabled", False)),
         }
         return normalized

@@ -53,6 +53,28 @@ audio_unmute:
       selector:
         text:
 
+voicemail_enable:
+  name: Voicemail enable
+  description: Enable voicemail on the intercom.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+
+voicemail_disable:
+  name: Voicemail disable
+  description: Disable voicemail on the intercom.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+
 entrypoint_unlock:
   name: Entrypoint unlock
   description: Trigger unlock on a specific entrypoint.
