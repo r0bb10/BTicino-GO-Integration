@@ -7,6 +7,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 import json
 import logging
+import random
 import time
 from typing import Any, Awaitable, Callable, TypeVar
 
@@ -19,9 +20,12 @@ from .const import (
     COMMAND_TIMEOUT_SECONDS,
     COORDINATOR_UPDATE_INTERVAL,
     DOMAIN,
-    SSE_PERIODIC_RESYNC_SECONDS,
+    SSE_AVAILABILITY_GRACE_SECONDS,
+    SSE_HEARTBEAT_TIMEOUT_SECONDS,
     SSE_READLINE_TIMEOUT_SECONDS,
-    SSE_STALE_THRESHOLD_SECONDS,
+    SSE_RECONNECT_JITTER_SECONDS,
+    SSE_RECONNECT_MAX_SECONDS,
+    SSE_RECONNECT_MIN_SECONDS,
 )
 
 _T = TypeVar("_T")
@@ -46,13 +50,17 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._sse_connected = False
         self._sse_last_error: str | None = None
         self._sse_last_activity = 0.0
-        self._sse_last_resync = 0.0
+        self._connected_grace_until = 0.0
+        self._reconnect_attempts = 0
         self._last_event_id = 0
-        self._connected = False
 
     @property
     def connected(self) -> bool:
-        return self._connected
+        if self._sse_connected:
+            return True
+        if self._connected_grace_until <= 0:
+            return False
+        return time.monotonic() <= self._connected_grace_until
 
     @property
     def sse_connected(self) -> bool:
@@ -68,11 +76,11 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @property
     def sse_stale(self) -> bool:
-        if self._sse_connected:
-            return False
+        if not self._sse_connected:
+            return not self.connected
         if self._sse_last_activity <= 0:
-            return True
-        return (time.monotonic() - self._sse_last_activity) >= SSE_STALE_THRESHOLD_SECONDS
+            return False
+        return (time.monotonic() - self._sse_last_activity) >= SSE_HEARTBEAT_TIMEOUT_SECONDS
 
     @property
     def needs_claim(self) -> bool:
@@ -114,7 +122,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._sse_connected = False
         self._sse_last_error = "event stream stopped"
-        self._connected = False
+        self._connected_grace_until = 0.0
         self._publish_runtime_state()
 
     async def async_restart_event_stream(self) -> None:
@@ -166,13 +174,14 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except CompanionAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except CompanionApiError as err:
-            self._set_connected(False)
             self._publish_runtime_state()
             raise UpdateFailed(str(err)) from err
 
-        self._connected = True
+        self._touch_connection_activity()
         existing = self.data if isinstance(self.data, dict) else {}
         runtime = self._runtime_snapshot()
+
+        state = self._normalize_state_payload(state)
 
         return {
             "health": health,
@@ -186,7 +195,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
     async def _async_event_stream_loop(self) -> None:
-        reconnect_delay = 1.0
+        reconnect_delay = SSE_RECONNECT_MIN_SECONDS
         while not self._sse_stop.is_set():
             response: ClientResponse | None = None
             try:
@@ -195,40 +204,40 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 self._sse_connected = True
                 self._sse_last_error = None
-                now = time.monotonic()
-                self._sse_last_activity = now
-                self._sse_last_resync = now
-                self._connected = True
+                self._touch_connection_activity()
                 self._publish_runtime_state()
 
-                reconnect_delay = 1.0
+                if self._reconnect_attempts > 0:
+                    await self.async_request_refresh()
+                reconnect_delay = SSE_RECONNECT_MIN_SECONDS
+                self._reconnect_attempts = 0
                 await self._async_consume_sse(response)
+                raise ClientPayloadError("event stream closed")
             except asyncio.CancelledError:
                 raise
             except CompanionAuthError as err:
                 self._sse_connected = False
                 self._sse_last_error = str(err)
-                self._set_connected(False)
                 self._publish_runtime_state()
-                await self.async_request_refresh()
+                self._reconnect_attempts += 1
                 await self._async_wait_or_stop(10.0)
             except (CompanionApiError, ClientConnectionError, ClientPayloadError, OSError) as err:
                 self._sse_connected = False
                 self._sse_last_error = str(err)
-                self._set_connected(False)
                 self._publish_runtime_state()
-                await self.async_request_refresh()
-                await self._async_wait_or_stop(reconnect_delay)
-                reconnect_delay = min(reconnect_delay * 2.0, 30.0)
+                self._reconnect_attempts += 1
+                jitter = random.uniform(0.0, SSE_RECONNECT_JITTER_SECONDS)
+                await self._async_wait_or_stop(reconnect_delay + jitter)
+                reconnect_delay = min(reconnect_delay * 2.0, SSE_RECONNECT_MAX_SECONDS)
             except Exception as err:  # noqa: BLE001
                 self._sse_connected = False
                 self._sse_last_error = f"event stream crashed: {err}"
-                self._set_connected(False)
                 self._publish_runtime_state()
                 _LOGGER.warning("Companion SSE loop crashed, retrying: %s", err, exc_info=True)
-                await self.async_request_refresh()
-                await self._async_wait_or_stop(reconnect_delay)
-                reconnect_delay = min(reconnect_delay * 2.0, 30.0)
+                self._reconnect_attempts += 1
+                jitter = random.uniform(0.0, SSE_RECONNECT_JITTER_SECONDS)
+                await self._async_wait_or_stop(reconnect_delay + jitter)
+                reconnect_delay = min(reconnect_delay * 2.0, SSE_RECONNECT_MAX_SECONDS)
             finally:
                 if response is not None:
                     response.close()
@@ -251,18 +260,14 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
             except TimeoutError as err:
                 now = time.monotonic()
-                if self._sse_last_activity > 0 and (now - self._sse_last_activity) >= SSE_STALE_THRESHOLD_SECONDS:
+                if self._sse_last_activity > 0 and (now - self._sse_last_activity) >= SSE_HEARTBEAT_TIMEOUT_SECONDS:
                     raise ClientPayloadError("SSE stream became stale") from err
-
-                if self._sse_last_resync <= 0 or (now - self._sse_last_resync) >= SSE_PERIODIC_RESYNC_SECONDS:
-                    self._sse_last_resync = now
-                    await self.async_request_refresh()
                 continue
 
             if raw_line == b"":
                 break
 
-            self._sse_last_activity = time.monotonic()
+            self._touch_connection_activity()
             line = raw_line.decode(errors="ignore").rstrip("\r\n")
             if line == "":
                 await self._async_dispatch_sse_event(event_id, data_lines)
@@ -306,6 +311,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elif isinstance(event_id, int):
             self._last_event_id = event_id
 
+        event_type = payload.get("type")
+        if isinstance(event_type, str) and event_type.strip().lower() == "heartbeat":
+            return
+
         self._apply_event(payload)
 
     def _apply_event(self, event: dict[str, Any]) -> None:
@@ -324,7 +333,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if isinstance(event_type, str):
             self._apply_active_entrypoint_transition(state, event_type, entrypoint_id)
 
-        existing["state"] = state
+        existing["state"] = self._normalize_state_payload(state)
         existing["last_event"] = event
         existing["runtime"] = self._runtime_snapshot()
         existing["updated_at"] = datetime.now(UTC).isoformat()
@@ -385,37 +394,37 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if event_type == "ring.ended":
             if not bool(state.get("stream_active")):
-                state["active_entrypoint"] = None
+                state["active_entrypoint"] = "none"
             return
 
         if event_type == "stream.stopped":
             if not bool(state.get("ringing")):
-                state["active_entrypoint"] = None
+                state["active_entrypoint"] = "none"
             return
 
         if event_type == "call.ended":
             if not bool(state.get("stream_active")) and not bool(state.get("ringing")):
-                state["active_entrypoint"] = None
+                state["active_entrypoint"] = "none"
 
     def _runtime_snapshot(self) -> dict[str, Any]:
         age_sec: float | None = None
         if self._sse_last_activity > 0:
             age_sec = max(0.0, time.monotonic() - self._sse_last_activity)
+        grace_sec: float = 0.0
+        if self._connected_grace_until > 0:
+            grace_sec = max(0.0, self._connected_grace_until - time.monotonic())
 
         return {
-            "connected": self._connected,
+            "connected": self.connected,
             "sse_connected": self._sse_connected,
             "sse_last_error": self._sse_last_error,
             "sse_last_event_id": self._last_event_id,
             "sse_last_activity_age_sec": age_sec,
             "sse_stale": self.sse_stale,
+            "availability_grace_sec": grace_sec,
+            "sse_reconnect_attempts": self._reconnect_attempts,
             "updated_at": datetime.now(UTC).isoformat(),
         }
-
-    def _set_connected(self, connected: bool) -> None:
-        if self._connected == connected:
-            return
-        self._connected = connected
 
     def _publish_runtime_state(self) -> None:
         if not isinstance(self.data, dict):
@@ -431,13 +440,30 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if err is not None:
             self._sse_connected = False
             self._sse_last_error = f"event stream task exited with error: {err}"
-            self._set_connected(False)
             _LOGGER.warning("Companion SSE task exited with error: %s", err)
             self._publish_runtime_state()
             return
 
         self._sse_connected = False
         self._sse_last_error = "event stream task exited unexpectedly"
-        self._set_connected(False)
         self._publish_runtime_state()
         _LOGGER.warning("Companion SSE task exited unexpectedly")
+
+    def _touch_connection_activity(self) -> None:
+        now = time.monotonic()
+        self._sse_last_activity = now
+        self._connected_grace_until = now + SSE_AVAILABILITY_GRACE_SECONDS
+
+    @staticmethod
+    def _normalize_state_payload(state: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(state or {})
+        active = normalized.get("active_entrypoint")
+        if not isinstance(active, str) or not active.strip():
+            normalized["active_entrypoint"] = "none"
+        else:
+            normalized["active_entrypoint"] = active.strip()
+        if not isinstance(normalized.get("call_state"), str) or not str(normalized.get("call_state", "")).strip():
+            normalized["call_state"] = "idle"
+        normalized["stream_active"] = bool(normalized.get("stream_active", False))
+        normalized["ringing"] = bool(normalized.get("ringing", False))
+        return normalized
