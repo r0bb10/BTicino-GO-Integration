@@ -168,6 +168,12 @@ class CompanionApiClient:
     async def async_call_hangup(self) -> dict[str, Any]:
         return await self._async_request("POST", "/api/v2/control/call/hangup", auth=True)
 
+    async def async_audio_mute(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/control/audio/mute", auth=True)
+
+    async def async_audio_unmute(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/control/audio/unmute", auth=True)
+
     async def async_entrypoint_unlock(self, entrypoint_id: str) -> dict[str, Any]:
         return await self._async_request(
             "POST",

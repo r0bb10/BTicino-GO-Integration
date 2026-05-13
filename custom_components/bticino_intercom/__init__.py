@@ -33,6 +33,8 @@ from .const import (
     PLATFORMS,
     SERVICE_CALL_ANSWER,
     SERVICE_CALL_HANGUP,
+    SERVICE_AUDIO_MUTE,
+    SERVICE_AUDIO_UNMUTE,
     SERVICE_ENTRYPOINT_STREAM_START,
     SERVICE_ENTRYPOINT_STREAM_STOP,
     SERVICE_ENTRYPOINT_UNLOCK,
@@ -206,6 +208,14 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         runtime = await _resolve_runtime(call)
         await _run_command("Call hangup", call, runtime.client.async_call_hangup)
 
+    async def _handle_audio_mute(call: ServiceCall) -> None:
+        runtime = await _resolve_runtime(call)
+        await _run_command("Audio mute", call, runtime.client.async_audio_mute)
+
+    async def _handle_audio_unmute(call: ServiceCall) -> None:
+        runtime = await _resolve_runtime(call)
+        await _run_command("Audio unmute", call, runtime.client.async_audio_unmute)
+
     async def _handle_entrypoint_unlock(call: ServiceCall) -> None:
         runtime = await _resolve_runtime(call)
         entrypoint_id = str(call.data["entrypoint_id"]).strip()
@@ -236,6 +246,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_REFRESH, _handle_refresh, schema=SERVICE_SCHEMA_ENTRY)
     hass.services.async_register(DOMAIN, SERVICE_CALL_ANSWER, _handle_call_answer, schema=SERVICE_SCHEMA_ENTRY)
     hass.services.async_register(DOMAIN, SERVICE_CALL_HANGUP, _handle_call_hangup, schema=SERVICE_SCHEMA_ENTRY)
+    hass.services.async_register(DOMAIN, SERVICE_AUDIO_MUTE, _handle_audio_mute, schema=SERVICE_SCHEMA_ENTRY)
+    hass.services.async_register(DOMAIN, SERVICE_AUDIO_UNMUTE, _handle_audio_unmute, schema=SERVICE_SCHEMA_ENTRY)
     hass.services.async_register(
         DOMAIN,
         SERVICE_ENTRYPOINT_UNLOCK,
@@ -266,6 +278,8 @@ async def _async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_REFRESH,
         SERVICE_CALL_ANSWER,
         SERVICE_CALL_HANGUP,
+        SERVICE_AUDIO_MUTE,
+        SERVICE_AUDIO_UNMUTE,
         SERVICE_ENTRYPOINT_UNLOCK,
         SERVICE_ENTRYPOINT_STREAM_START,
         SERVICE_ENTRYPOINT_STREAM_STOP,

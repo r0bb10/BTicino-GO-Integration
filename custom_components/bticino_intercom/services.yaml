@@ -31,6 +31,28 @@ call_hangup:
       selector:
         text:
 
+audio_mute:
+  name: Audio mute
+  description: Mute the intercom.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+
+audio_unmute:
+  name: Audio unmute
+  description: Unmute the intercom.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:
+
 entrypoint_unlock:
   name: Entrypoint unlock
   description: Trigger unlock on a specific entrypoint.

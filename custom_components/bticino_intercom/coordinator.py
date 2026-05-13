@@ -343,6 +343,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _apply_state_transition(state: dict[str, Any], event_type: str) -> None:
         stream_active = bool(state.get("stream_active"))
         ringing = bool(state.get("ringing"))
+        audio = state.get("audio")
+        if not isinstance(audio, dict):
+            audio = {"muted": False}
+            state["audio"] = audio
 
         if event_type in ("ring.started", "call.incoming"):
             state["call_state"] = "ringing"
@@ -375,6 +379,14 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if event_type == "stream.stopped":
             state["stream_active"] = False
             state["call_state"] = "ringing" if ringing else "idle"
+            return
+
+        if event_type == "audio.muted":
+            audio["muted"] = True
+            return
+
+        if event_type == "audio.unmuted":
+            audio["muted"] = False
             return
 
     @staticmethod
@@ -466,4 +478,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             normalized["call_state"] = "idle"
         normalized["stream_active"] = bool(normalized.get("stream_active", False))
         normalized["ringing"] = bool(normalized.get("ringing", False))
+        audio = normalized.get("audio")
+        if not isinstance(audio, dict):
+            audio = {}
+        normalized["audio"] = {
+            "muted": bool(audio.get("muted", False)),
+        }
         return normalized

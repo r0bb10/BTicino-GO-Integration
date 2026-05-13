@@ -31,11 +31,13 @@ SSE_RECONNECT_MIN_SECONDS = 1.0
 SSE_RECONNECT_MAX_SECONDS = 20.0
 SSE_RECONNECT_JITTER_SECONDS = 0.35
 
-PLATFORMS: list[str] = ["sensor", "binary_sensor", "button", "camera", "event"]
+PLATFORMS: list[str] = ["sensor", "binary_sensor", "button", "camera", "event", "switch"]
 
 SERVICE_REFRESH = "refresh"
 SERVICE_CALL_ANSWER = "call_answer"
 SERVICE_CALL_HANGUP = "call_hangup"
+SERVICE_AUDIO_MUTE = "audio_mute"
+SERVICE_AUDIO_UNMUTE = "audio_unmute"
 SERVICE_ENTRYPOINT_UNLOCK = "entrypoint_unlock"
 SERVICE_ENTRYPOINT_STREAM_START = "entrypoint_stream_start"
 SERVICE_ENTRYPOINT_STREAM_STOP = "entrypoint_stream_stop"
