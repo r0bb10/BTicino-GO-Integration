@@ -6,12 +6,10 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -29,15 +27,6 @@ class CompanionBinarySensorDescription(BinarySensorEntityDescription):
 
 
 SENSORS: tuple[CompanionBinarySensorDescription, ...] = (
-    CompanionBinarySensorDescription(
-        key="connected",
-        name="Companion",
-        icon="mdi:lan-connect",
-        device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda _data, coordinator: coordinator.connected,
-        strict_availability=False,
-    ),
     CompanionBinarySensorDescription(
         key="ringing",
         name="Ringing",

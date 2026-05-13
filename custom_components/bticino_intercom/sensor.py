@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
@@ -53,17 +53,8 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         strict_availability=False,
     ),
     CompanionSensorDescription(
-        key="network_wifi_rssi",
-        name="WiFi dB",
-        icon="mdi:wifi",
-        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
-        native_unit_of_measurement="dBm",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data, _: _wifi_rssi(data),
-    ),
-    CompanionSensorDescription(
         key="network_wifi_signal",
-        name="WiFi Signal",
+        name="WiFi Strength",
         icon="mdi:wifi-strength-3",
         native_unit_of_measurement="%",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -88,24 +79,24 @@ def _network_value(data: dict[str, Any], key: str) -> str | None:
     return value or None
 
 
-def _wifi_rssi(data: dict[str, Any]) -> int | None:
+def _wifi_strength(data: dict[str, Any]) -> int | None:
     state = data.get("state", {}) if isinstance(data, dict) else {}
     diagnostics = state.get("diagnostics", {}) if isinstance(state, dict) else {}
     network = diagnostics.get("network", {}) if isinstance(diagnostics, dict) else {}
     if not isinstance(network, dict):
         return None
+    value = network.get("wifi_strength")
+    if isinstance(value, (int, float)):
+        return max(0, min(100, int(value)))
     value = network.get("wifi_rssi")
     if isinstance(value, (int, float)):
-        return int(value)
+        # Backward compatibility when companion still emits only wifi_rssi.
+        return max(0, min(100, int(value)))
     return None
 
 
 def _wifi_signal_percent(data: dict[str, Any]) -> int | None:
-    rssi = _wifi_rssi(data)
-    if rssi is None:
-        return None
-    # Map common WiFi RSSI range [-100, -50] dBm to [0, 100] percent.
-    return max(0, min(100, 2 * (rssi + 100)))
+    return _wifi_strength(data)
 
 
 async def async_setup_entry(
