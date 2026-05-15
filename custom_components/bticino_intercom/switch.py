@@ -7,13 +7,12 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
-from .const import DOMAIN, NAME
 from .coordinator import CompanionCoordinator
+from .device_info import build_device_info
 
 
 async def async_setup_entry(
@@ -63,18 +62,8 @@ class CompanionMuteSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity)
         self._attr_unique_id = f"{entry.entry_id}_mute"
 
     @property
-    def device_info(self) -> DeviceInfo:
-        state = self.coordinator.data.get("state", {}) if isinstance(self.coordinator.data, dict) else {}
-        device = state.get("device", {}) if isinstance(state, dict) else {}
-        model = str(device.get("model", "")).strip() or "Companion"
-        firmware = str(device.get("firmware", "")).strip() or None
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
-            name=NAME,
-            manufacturer="BTicino",
-            model=model,
-            sw_version=firmware,
-        )
+    def device_info(self):
+        return build_device_info(self._entry, self.coordinator.data)
 
     @property
     def available(self) -> bool:
@@ -121,18 +110,8 @@ class CompanionVoicemailSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEn
         self._attr_unique_id = f"{entry.entry_id}_voicemail"
 
     @property
-    def device_info(self) -> DeviceInfo:
-        state = self.coordinator.data.get("state", {}) if isinstance(self.coordinator.data, dict) else {}
-        device = state.get("device", {}) if isinstance(state, dict) else {}
-        model = str(device.get("model", "")).strip() or "Companion"
-        firmware = str(device.get("firmware", "")).strip() or None
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
-            name=NAME,
-            manufacturer="BTicino",
-            model=model,
-            sw_version=firmware,
-        )
+    def device_info(self):
+        return build_device_info(self._entry, self.coordinator.data)
 
     @property
     def available(self) -> bool:

@@ -8,13 +8,13 @@ from urllib.parse import urlsplit
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
-from .const import CONF_COMPANION_URL, DEFAULT_COMPANION_URL, DOMAIN, NAME
+from .const import CONF_COMPANION_URL, DEFAULT_COMPANION_URL
 from .coordinator import CompanionCoordinator
+from .device_info import build_device_info
 
 _DEFAULT_RTSP_PORT = 8554
 _DEFAULT_RTSP_PATH = "doorbell"
@@ -94,18 +94,8 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
         self.stream_options["rtsp_transport"] = "tcp"
 
     @property
-    def device_info(self) -> DeviceInfo:
-        state = self.coordinator.data.get("state", {}) if isinstance(self.coordinator.data, dict) else {}
-        device = state.get("device", {}) if isinstance(state, dict) else {}
-        model = str(device.get("model", "")).strip() or "Companion"
-        firmware = str(device.get("firmware", "")).strip() or None
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
-            name=NAME,
-            manufacturer="BTicino",
-            model=model,
-            sw_version=firmware,
-        )
+    def device_info(self):
+        return build_device_info(self._entry, self.coordinator.data)
 
     @property
     def available(self) -> bool:

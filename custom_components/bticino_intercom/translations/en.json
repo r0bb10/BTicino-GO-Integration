@@ -19,10 +19,32 @@
           "access_token": "Access token",
           "claim_code": "Claim code"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure BTicino Companion",
+        "description": "Update companion connection settings and credentials.",
+        "data": {
+          "companion_url": "Companion URL",
+          "access_token": "Access token",
+          "claim_code": "Claim code",
+          "verify_ssl": "Verify SSL",
+          "request_timeout_sec": "Request timeout (seconds)"
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "Confirm BTicino Companion",
+        "description": "Confirm and authenticate the discovered companion device.",
+        "data": {
+          "access_token": "Access token",
+          "claim_code": "Claim code"
+        }
       }
     },
     "abort": {
-      "wrong_device": "Credentials belong to a different companion device"
+      "wrong_device": "Credentials belong to a different companion device",
+      "reauth_successful": "Reauthentication completed successfully",
+      "reconfigure_successful": "Configuration updated successfully",
+      "already_configured": "This companion is already configured"
     },
     "error": {
       "cannot_connect": "Cannot connect to companion",

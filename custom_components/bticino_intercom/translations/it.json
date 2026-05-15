@@ -1,0 +1,110 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BTicino Companion",
+        "description": "Collega Home Assistant a Companion",
+        "data": {
+          "companion_url": "URL Companion",
+          "access_token": "Token di accesso",
+          "claim_code": "Claim code",
+          "verify_ssl": "Verifica SSL",
+          "request_timeout_sec": "Timeout richiesta (secondi)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Riautentica BTicino Companion",
+        "description": "Companion ha rifiutato le credenziali salvate. Inserisci un token di accesso o claim code per riconnettere.",
+        "data": {
+          "access_token": "Token di accesso",
+          "claim_code": "Claim code"
+        }
+      },
+      "reconfigure": {
+        "title": "Riconfigura BTicino Companion",
+        "description": "Aggiorna impostazioni di connessione e credenziali.",
+        "data": {
+          "companion_url": "URL Companion",
+          "access_token": "Token di accesso",
+          "claim_code": "Claim code",
+          "verify_ssl": "Verifica SSL",
+          "request_timeout_sec": "Timeout richiesta (secondi)"
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "Conferma BTicino Companion",
+        "description": "Conferma e autentica il dispositivo Companion rilevato.",
+        "data": {
+          "access_token": "Token di accesso",
+          "claim_code": "Claim code"
+        }
+      }
+    },
+    "abort": {
+      "wrong_device": "Le credenziali appartengono a un dispositivo Companion diverso",
+      "reauth_successful": "Riautenticazione completata con successo",
+      "reconfigure_successful": "Configurazione aggiornata con successo",
+      "already_configured": "Questo Companion è già configurato"
+    },
+    "error": {
+      "cannot_connect": "Impossibile connettersi a Companion",
+      "invalid_auth": "Autenticazione fallita",
+      "invalid_claim_code": "Claim code richiesto o non valido",
+      "invalid_challenge": "Challenge Companion non valida o scaduta",
+      "already_claimed": "Companion è già claimato",
+      "pairing_locked": "Pairing temporaneamente bloccato, riprova più tardi",
+      "repair_code_invalid": "Repair code non valido o scaduto",
+      "repair_not_allowed": "Reset del claim non consentito al momento",
+      "invalid_url": "URL Companion non valido"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni",
+        "data": {
+          "companion_url": "URL Companion",
+          "access_token": "Token di accesso",
+          "verify_ssl": "Verifica SSL",
+          "request_timeout_sec": "Timeout richiesta (secondi)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossibile connettersi a Companion",
+      "invalid_auth": "Autenticazione fallita",
+      "invalid_url": "URL Companion non valido"
+    }
+  },
+  "issues": {
+    "claim_recovery": {
+      "title": "Credenziali Companion da recuperare",
+      "description": "Companion ha rifiutato le credenziali salvate per questa configurazione. Avvia la riparazione per resettare il claim e generare credenziali nuove."
+    }
+  },
+  "repair_flow": {
+    "claim_recovery": {
+      "step": {
+        "confirm": {
+          "title": "Recupera Claim Companion",
+          "description": "Questo emetterà un repair code temporaneo, resetterà lo stato di claim e richiederà un nuovo token di accesso a Companion."
+        }
+      },
+      "abort": {
+        "entry_missing": "Voce di configurazione mancante"
+      },
+      "error": {
+        "cannot_connect": "Impossibile connettersi a Companion",
+        "invalid_auth": "Autenticazione fallita",
+        "pairing_locked": "Pairing temporaneamente bloccato, riprova più tardi",
+        "repair_code_invalid": "Repair code non valido o scaduto",
+        "repair_not_allowed": "Reset del claim non consentito al momento",
+        "invalid_claim_code": "Claim code richiesto o non valido",
+        "invalid_challenge": "Challenge Companion non valida o scaduta"
+      },
+      "create_entry": {
+        "default": "Recupero claim Companion completato"
+      }
+    }
+  }
+}
