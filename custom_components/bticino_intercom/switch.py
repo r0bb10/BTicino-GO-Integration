@@ -23,10 +23,21 @@ async def async_setup_entry(
     runtime: IntegrationRuntime = entry.runtime_data
     coordinator = runtime.coordinator
     client = runtime.client
-    entities: list[SwitchEntity] = [CompanionMuteSwitch(entry, coordinator, client)]
+    entities: list[SwitchEntity] = []
+    if _supports_mute(coordinator):
+        entities.append(CompanionMuteSwitch(entry, coordinator, client))
     if _supports_voicemail(coordinator):
         entities.append(CompanionVoicemailSwitch(entry, coordinator, client))
     async_add_entities(entities)
+
+
+def _supports_mute(coordinator: CompanionCoordinator) -> bool:
+    data = coordinator.data if isinstance(coordinator.data, dict) else {}
+    capabilities = data.get("capabilities", {}) if isinstance(data, dict) else {}
+    cap_list = capabilities.get("capabilities", []) if isinstance(capabilities, dict) else []
+    if isinstance(cap_list, list) and cap_list:
+        return "control_audio_v2" in set(str(cap).strip() for cap in cap_list if isinstance(cap, str))
+    return True
 
 
 def _supports_voicemail(coordinator: CompanionCoordinator) -> bool:

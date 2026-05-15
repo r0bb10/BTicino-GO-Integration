@@ -40,6 +40,7 @@ from .const import (
     SERVICE_ENTRYPOINT_STREAM_START,
     SERVICE_ENTRYPOINT_STREAM_STOP,
     SERVICE_ENTRYPOINT_UNLOCK,
+    SERVICE_SYSTEM_REBOOT,
     SERVICE_REFRESH,
 )
 from .coordinator import CompanionCoordinator
@@ -62,7 +63,6 @@ SERVICE_SCHEMA_ENTRYPOINT = vol.Schema(
         vol.Required("entrypoint_id"): str,
     }
 )
-
 
 def _entry_value(entry: ConfigEntry, key: str, default: Any) -> Any:
     return entry.options.get(key, entry.data.get(key, default))
@@ -253,6 +253,14 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             lambda: runtime.client.async_entrypoint_stream_stop(entrypoint_id),
         )
 
+    async def _handle_system_reboot(call: ServiceCall) -> None:
+        runtime = await _resolve_runtime(call)
+        await _run_command(
+            "System reboot",
+            call,
+            runtime.client.async_system_reboot,
+        )
+
     hass.services.async_register(DOMAIN, SERVICE_REFRESH, _handle_refresh, schema=SERVICE_SCHEMA_ENTRY)
     hass.services.async_register(DOMAIN, SERVICE_CALL_ANSWER, _handle_call_answer, schema=SERVICE_SCHEMA_ENTRY)
     hass.services.async_register(DOMAIN, SERVICE_CALL_HANGUP, _handle_call_hangup, schema=SERVICE_SCHEMA_ENTRY)
@@ -282,6 +290,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         _handle_entrypoint_stream_stop,
         schema=SERVICE_SCHEMA_ENTRYPOINT,
     )
+    hass.services.async_register(DOMAIN, SERVICE_SYSTEM_REBOOT, _handle_system_reboot, schema=SERVICE_SCHEMA_ENTRY)
 
     hass.data[DATA_SERVICES_REGISTERED] = True
 
@@ -301,6 +310,7 @@ async def _async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_ENTRYPOINT_UNLOCK,
         SERVICE_ENTRYPOINT_STREAM_START,
         SERVICE_ENTRYPOINT_STREAM_STOP,
+        SERVICE_SYSTEM_REBOOT,
     ):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)

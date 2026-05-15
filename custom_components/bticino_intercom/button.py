@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -26,8 +27,10 @@ async def async_setup_entry(
     client = runtime.client
 
     known_entrypoint_ids: set[str] = set()
+    reboot_added = False
 
     def _sync_unlock_buttons() -> None:
+        nonlocal reboot_added
         data = coordinator.data if isinstance(coordinator.data, dict) else {}
         entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
         rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
@@ -59,6 +62,25 @@ async def async_setup_entry(
 
         if new_entities:
             async_add_entities(new_entities)
+
+        system_control = data.get("system_control", {}) if isinstance(data, dict) else {}
+        if not isinstance(system_control, dict):
+            return
+
+        system_entities: list[ButtonEntity] = []
+        if bool(system_control.get("reboot_enabled", False)):
+            if not reboot_added:
+                reboot_added = True
+                system_entities.append(
+                    CompanionSystemRebootButton(
+                        entry=entry,
+                        coordinator=coordinator,
+                        client=client,
+                    )
+                )
+
+        if system_entities:
+            async_add_entities(system_entities)
 
     _sync_unlock_buttons()
     entry.async_on_unload(coordinator.async_add_listener(_sync_unlock_buttons))
@@ -102,4 +124,45 @@ class CompanionEntrypointUnlockButton(CoordinatorEntity[CompanionCoordinator], B
         await self.coordinator.async_run_command(
             label=f"Entrypoint unlock ({self._entrypoint_id})",
             command_coro_factory=lambda: self._client.async_entrypoint_unlock(self._entrypoint_id),
+        )
+
+
+class CompanionSystemRebootButton(CoordinatorEntity[CompanionCoordinator], ButtonEntity):
+    """Button to reboot the intercom host."""
+
+    _attr_has_entity_name = True
+    _attr_name = "System Reboot"
+    _attr_icon = "mdi:restart-alert"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        *,
+        entry: ConfigEntry,
+        coordinator: CompanionCoordinator,
+        client: CompanionApiClient,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._client = client
+        self._attr_unique_id = f"{entry.entry_id}_system_reboot"
+
+    @property
+    def device_info(self):
+        return build_device_info(self._entry, self.coordinator.data)
+
+    @property
+    def available(self) -> bool:
+        if not self.coordinator.entities_available:
+            return False
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        system_control = data.get("system_control", {}) if isinstance(data, dict) else {}
+        if not isinstance(system_control, dict):
+            return False
+        return bool(system_control.get("reboot_enabled", False))
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_run_command(
+            label="System reboot",
+            command_coro_factory=self._client.async_system_reboot,
         )

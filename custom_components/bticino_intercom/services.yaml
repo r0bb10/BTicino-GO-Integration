@@ -125,3 +125,14 @@ entrypoint_stream_stop:
       required: true
       selector:
         text:
+
+system_reboot:
+  name: System reboot
+  description: Reboot the intercom host.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry id when multiple hubs are configured.
+      required: false
+      selector:
+        text:

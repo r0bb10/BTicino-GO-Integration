@@ -159,6 +159,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             state: dict[str, Any] = {}
             entrypoints: dict[str, Any] = {"entrypoints": []}
             capabilities: dict[str, Any] = {"api_version": "v2", "capabilities": []}
+            system_control: dict[str, Any] = {
+                "reboot_enabled": False,
+                "services": {},
+            }
 
             try:
                 auth_status = await self.client.async_get_auth_status(auth=False)
@@ -170,6 +174,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 state = await self.client.async_get_state()
                 entrypoints = await self.client.async_get_entrypoints()
                 capabilities = await self.client.async_get_capabilities()
+                system_control = self._normalize_system_control(capabilities.get("system_control"))
 
         except CompanionAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
@@ -189,6 +194,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "state": state,
             "entrypoints": entrypoints,
             "capabilities": capabilities,
+            "system_control": system_control,
             "last_event": existing.get("last_event"),
             "runtime": runtime,
             "updated_at": datetime.now(UTC).isoformat(),
@@ -509,3 +515,20 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "welcome_message_enabled": bool(voicemail.get("welcome_message_enabled", False)),
         }
         return normalized
+
+    @staticmethod
+    def _normalize_system_control(payload: Any) -> dict[str, Any]:
+        row = payload if isinstance(payload, dict) else {}
+        services = row.get("services", [])
+        if isinstance(services, dict):
+            normalized_services = {
+                str(name).strip(): value
+                for name, value in services.items()
+                if isinstance(name, str) and str(name).strip() and isinstance(value, dict)
+            }
+        else:
+            normalized_services = {}
+        return {
+            "reboot_enabled": bool(row.get("reboot_enabled", False)),
+            "services": normalized_services,
+        }

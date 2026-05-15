@@ -201,6 +201,26 @@ class CompanionApiClient:
             auth=True,
         )
 
+    async def async_system_reboot(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/control/system/reboot", auth=True)
+
+    async def async_get_system_services(self) -> dict[str, Any]:
+        return await self._async_request("GET", "/api/v2/control/system/services", auth=True)
+
+    async def async_get_system_service_status(self, service_name: str) -> dict[str, Any]:
+        return await self._async_request(
+            "GET",
+            f"/api/v2/control/system/services/{service_name}/status",
+            auth=True,
+        )
+
+    async def async_system_service_restart(self, service_name: str) -> dict[str, Any]:
+        return await self._async_request(
+            "POST",
+            f"/api/v2/control/system/services/{service_name}/restart",
+            auth=True,
+        )
+
     async def async_open_events_stream(self, *, last_event_id: int | None = None) -> ClientResponse:
         if not self._access_token and not await self._async_try_refresh():
             raise CompanionAuthError("access token is required for events stream")
