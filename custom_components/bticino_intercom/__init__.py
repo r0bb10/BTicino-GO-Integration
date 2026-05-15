@@ -313,8 +313,7 @@ def _claim_recovery_issue_id(entry_id: str) -> str:
 
 
 def _ensure_claim_recovery_issue(hass: HomeAssistant, entry_id: str) -> None:
-    hass.add_job(
-        ir.async_create_issue,
+    ir.async_create_issue(
         hass,
         DOMAIN,
         _claim_recovery_issue_id(entry_id),
@@ -327,4 +326,4 @@ def _ensure_claim_recovery_issue(hass: HomeAssistant, entry_id: str) -> None:
 
 
 def _delete_claim_recovery_issue(hass: HomeAssistant, entry_id: str) -> None:
-    hass.add_job(ir.async_delete_issue, hass, DOMAIN, _claim_recovery_issue_id(entry_id))
+    ir.async_delete_issue(hass, DOMAIN, _claim_recovery_issue_id(entry_id))
