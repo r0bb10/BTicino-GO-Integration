@@ -31,7 +31,7 @@ SSE_RECONNECT_MIN_SECONDS = 1.0
 SSE_RECONNECT_MAX_SECONDS = 20.0
 SSE_RECONNECT_JITTER_SECONDS = 0.35
 
-PLATFORMS: list[str] = ["sensor", "binary_sensor", "button", "camera", "event", "switch"]
+PLATFORMS: list[str] = ["sensor", "binary_sensor", "button", "camera", "event", "switch", "update"]
 
 SERVICE_REFRESH = "refresh"
 SERVICE_CALL_ANSWER = "call_answer"

@@ -528,7 +528,20 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
         else:
             normalized_services = {}
+        update_payload = row.get("update", {})
+        if not isinstance(update_payload, dict):
+            update_payload = {}
+        update_status = update_payload.get("status", {})
+        if not isinstance(update_status, dict):
+            update_status = {}
         return {
             "reboot_enabled": bool(row.get("reboot_enabled", False)),
             "services": normalized_services,
+            "update": {
+                "enabled": bool(update_payload.get("enabled", False)),
+                "exposed": bool(update_payload.get("exposed", False)),
+                "allow_apply": bool(update_payload.get("allow_apply", False)),
+                "allow_rollback": bool(update_payload.get("allow_rollback", False)),
+                "status": update_status,
+            },
         }

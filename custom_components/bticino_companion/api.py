@@ -221,6 +221,57 @@ class CompanionApiClient:
             auth=True,
         )
 
+    async def async_get_update_status(self) -> dict[str, Any]:
+        return await self._async_request("GET", "/api/v2/control/system/update/status", auth=True)
+
+    async def async_update_check(
+        self,
+        *,
+        force: bool = False,
+        available_version: str | None = None,
+        artifact_path: str | None = None,
+        sha256: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if force:
+            payload["force"] = True
+        if available_version is not None:
+            payload["available_version"] = str(available_version).strip()
+        if artifact_path is not None:
+            payload["artifact_path"] = str(artifact_path).strip()
+        if sha256 is not None:
+            payload["sha256"] = str(sha256).strip()
+        return await self._async_request(
+            "POST",
+            "/api/v2/control/system/update/check",
+            auth=True,
+            json_body=payload or None,
+        )
+
+    async def async_update_apply(
+        self,
+        *,
+        version: str | None = None,
+        artifact_path: str | None = None,
+        sha256: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if version is not None:
+            payload["version"] = str(version).strip()
+        if artifact_path is not None:
+            payload["artifact_path"] = str(artifact_path).strip()
+        if sha256 is not None:
+            payload["sha256"] = str(sha256).strip()
+        return await self._async_request(
+            "POST",
+            "/api/v2/control/system/update/apply",
+            auth=True,
+            json_body=payload or None,
+        )
+
+    async def async_update_rollback(self) -> dict[str, Any]:
+        return await self._async_request("POST", "/api/v2/control/system/update/rollback", auth=True)
+
     async def async_open_events_stream(self, *, last_event_id: int | None = None) -> ClientResponse:
         if not self._access_token and not await self._async_try_refresh():
             raise CompanionAuthError("access token is required for events stream")
