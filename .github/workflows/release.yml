@@ -1,0 +1,87 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (example: 2026.5.0)"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  validate-hacs:
+    name: "HACS Validation"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@main"
+
+      - name: "Run HACS validation"
+        uses: "hacs/action@main"
+        env:
+          REPOSITORY_REF: "main"
+        with:
+          category: "integration"
+          ignore: "brands topics description"
+
+  validate-hassfest:
+    name: "HASSFest Validation"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@main"
+
+      - name: "Run HASSFest validation"
+        uses: home-assistant/actions/hassfest@master
+
+  release:
+    name: "Release"
+    runs-on: "ubuntu-latest"
+    needs:
+      - validate-hacs
+      - validate-hassfest
+    permissions:
+      contents: write
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@main"
+
+      - name: "Resolve tag name"
+        id: "meta"
+        shell: "bash"
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          if [ -z "${TAG}" ]; then
+            echo "Tag name is empty" >&2
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: "Adjust version number"
+        shell: "bash"
+        run: |
+          yq -i -o json '.version="${{ steps.meta.outputs.tag }}"' \
+            "${{ github.workspace }}/custom_components/bticino_companion/manifest.json"
+
+      - name: "ZIP the integration directory"
+        shell: "bash"
+        run: |
+          cd "${{ github.workspace }}/custom_components/bticino_companion"
+          zip bticino_companion.zip -r ./
+
+      - name: "Upload the ZIP file to the release"
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: ${{ github.workspace }}/custom_components/bticino_companion/bticino_companion.zip

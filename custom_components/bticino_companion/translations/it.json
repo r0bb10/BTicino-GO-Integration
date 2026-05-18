@@ -79,31 +79,28 @@
   "issues": {
     "claim_recovery": {
       "title": "Credenziali Companion da recuperare",
-      "description": "Companion ha rifiutato le credenziali salvate per questa configurazione. Avvia la riparazione per resettare il claim e generare credenziali nuove."
-    }
-  },
-  "repair_flow": {
-    "claim_recovery": {
-      "step": {
-        "confirm": {
-          "title": "Recupera Claim Companion",
-          "description": "Questo emetterà un repair code temporaneo, resetterà lo stato di claim e richiederà un nuovo token di accesso a Companion."
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Recupera Claim Companion",
+            "description": "Questo emetterà un repair code temporaneo, resetterà lo stato di claim e richiederà un nuovo token di accesso a Companion."
+          }
+        },
+        "abort": {
+          "entry_missing": "Voce di configurazione mancante"
+        },
+        "error": {
+          "cannot_connect": "Impossibile connettersi a Companion",
+          "invalid_auth": "Autenticazione fallita",
+          "pairing_locked": "Pairing temporaneamente bloccato, riprova più tardi",
+          "repair_code_invalid": "Repair code non valido o scaduto",
+          "repair_not_allowed": "Reset del claim non consentito al momento",
+          "invalid_claim_code": "Claim code richiesto o non valido",
+          "invalid_challenge": "Challenge Companion non valida o scaduta"
+        },
+        "create_entry": {
+          "default": "Recupero claim Companion completato"
         }
-      },
-      "abort": {
-        "entry_missing": "Voce di configurazione mancante"
-      },
-      "error": {
-        "cannot_connect": "Impossibile connettersi a Companion",
-        "invalid_auth": "Autenticazione fallita",
-        "pairing_locked": "Pairing temporaneamente bloccato, riprova più tardi",
-        "repair_code_invalid": "Repair code non valido o scaduto",
-        "repair_not_allowed": "Reset del claim non consentito al momento",
-        "invalid_claim_code": "Claim code richiesto o non valido",
-        "invalid_challenge": "Challenge Companion non valida o scaduta"
-      },
-      "create_entry": {
-        "default": "Recupero claim Companion completato"
       }
     }
   }

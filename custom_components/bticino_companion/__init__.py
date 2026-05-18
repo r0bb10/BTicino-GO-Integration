@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 
 from .api import CompanionApiClient, CompanionApiError
@@ -63,6 +64,7 @@ SERVICE_SCHEMA_ENTRYPOINT = vol.Schema(
         vol.Required("entrypoint_id"): str,
     }
 )
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 def _entry_value(entry: ConfigEntry, key: str, default: Any) -> Any:
     return entry.options.get(key, entry.data.get(key, default))

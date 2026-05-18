@@ -1,11 +1,11 @@
-"""Constants for BTicino Intercom integration."""
+"""Constants for BTicino Companion integration."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 
-DOMAIN = "bticino_intercom"
-NAME = "BTicino Intercom"
+DOMAIN = "bticino_companion"
+NAME = "BTicino Companion"
 
 CONF_COMPANION_URL = "companion_url"
 CONF_ACCESS_TOKEN = "access_token"
@@ -47,5 +47,5 @@ SERVICE_SYSTEM_REBOOT = "system_reboot"
 
 DATA_SERVICES_REGISTERED = f"{DOMAIN}_services_registered"
 ISSUE_CLAIM_RECOVERY = "claim_recovery"
-EVENT_OPENWEBNET_FRAME = "bticino_intercom_openwebnet_frame"
+EVENT_OPENWEBNET_FRAME = "bticino_companion_openwebnet_frame"
 SIGNAL_OPENWEBNET_TRACE = f"{DOMAIN}_openwebnet_trace"
