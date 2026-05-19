@@ -17,7 +17,6 @@ from .coordinator import CompanionCoordinator
 from .device_info import build_device_info
 
 _DEFAULT_RTSP_PORT = 8554
-_DEFAULT_RTSP_PATH = "doorbell"
 
 
 async def async_setup_entry(
@@ -128,6 +127,10 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
 def _build_rtsp_stream_url(companion_url: str, data: dict[str, Any] | None, entrypoint_id: str) -> str | None:
     payload = data if isinstance(data, dict) else {}
     state = payload.get("state", {}) if isinstance(payload, dict) else {}
+    stream_info = _entrypoint_stream_info(payload, entrypoint_id)
+    if stream_info is None:
+        return None
+    stream_path, stream_port = stream_info
 
     host = ""
     if companion_url:
@@ -143,27 +146,33 @@ def _build_rtsp_stream_url(companion_url: str, data: dict[str, Any] | None, entr
         return None
 
     host_for_url = f"[{host}]" if ":" in host and not host.startswith("[") else host
-    token = _sanitize_path_token(entrypoint_id)
-    if not token:
+    return f"rtsp://{host_for_url}:{stream_port}/{stream_path}"
+
+
+def _entrypoint_stream_info(data: dict[str, Any], entrypoint_id: str) -> tuple[str, int] | None:
+    entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
+    rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
+    if not isinstance(rows, list):
         return None
-    stream_path = f"{_DEFAULT_RTSP_PATH}-{token}"
-    return f"rtsp://{host_for_url}:{_DEFAULT_RTSP_PORT}/{stream_path}"
 
-
-def _sanitize_path_token(raw: str) -> str:
-    value = str(raw).strip().lower()
-    if not value:
-        return ""
-
-    chars: list[str] = []
-    last_dash = False
-    for ch in value:
-        if "a" <= ch <= "z" or "0" <= ch <= "9" or ch in ("-", "_"):
-            chars.append(ch)
-            last_dash = False
+    for row in rows:
+        if not isinstance(row, dict):
             continue
-        if not last_dash:
-            chars.append("-")
-            last_dash = True
+        if str(row.get("id", "")).strip() != entrypoint_id:
+            continue
+        stream_path = str(row.get("rtsp_path", "")).strip().lstrip("/")
+        if not stream_path:
+            return None
+        stream_port = _positive_port(row.get("rtsp_port"), _DEFAULT_RTSP_PORT)
+        return stream_path, stream_port
+    return None
 
-    return "".join(chars).strip("-")
+
+def _positive_port(raw: Any, fallback: int) -> int:
+    try:
+        port = int(raw)
+    except (TypeError, ValueError):
+        return fallback
+    if port <= 0 or port > 65535:
+        return fallback
+    return port

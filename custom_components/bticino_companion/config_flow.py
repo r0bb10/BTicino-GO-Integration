@@ -581,7 +581,7 @@ def _companion_url_from_discovery(discovery_info: ZeroconfServiceInfo) -> str | 
     if scheme not in {"http", "https"}:
         scheme = "http"
 
-    port = discovery_info.port or 8090
+    port = discovery_info.port or 8080
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
 
