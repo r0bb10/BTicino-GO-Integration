@@ -7,4 +7,4 @@
 [![Top Language](https://img.shields.io/github/languages/top/r0bb10/BTicino-GO-Integration)](https://www.python.org/)
 [![State Sync](https://img.shields.io/badge/state-SSE%20first%20%2B%20polling-blue)](custom_components/bticino_companion/coordinator.py)
 
-Home Assistant custom integration for the BTicino GO Companion API. It talks directly to the local companion service running on the intercom.
+Home Assistant custom integration for the BTicino GO Companion API. It talks directly to the local companion service running on the device.

@@ -128,7 +128,7 @@ class CompanionEntrypointUnlockButton(CoordinatorEntity[CompanionCoordinator], B
 
 
 class CompanionSystemRebootButton(CoordinatorEntity[CompanionCoordinator], ButtonEntity):
-    """Button to reboot the intercom host."""
+    """Button to reboot the companion host."""
 
     _attr_has_entity_name = True
     _attr_name = "System Reboot"

@@ -33,7 +33,7 @@ call_hangup:
 
 audio_mute:
   name: Audio mute
-  description: Mute the intercom.
+  description: Mute companion audio.
   fields:
     entry_id:
       name: Entry ID
@@ -44,7 +44,7 @@ audio_mute:
 
 audio_unmute:
   name: Audio unmute
-  description: Unmute the intercom.
+  description: Unmute companion audio.
   fields:
     entry_id:
       name: Entry ID
@@ -55,7 +55,7 @@ audio_unmute:
 
 voicemail_enable:
   name: Voicemail enable
-  description: Enable voicemail on the intercom.
+  description: Enable voicemail on companion.
   fields:
     entry_id:
       name: Entry ID
@@ -66,7 +66,7 @@ voicemail_enable:
 
 voicemail_disable:
   name: Voicemail disable
-  description: Disable voicemail on the intercom.
+  description: Disable voicemail on companion.
   fields:
     entry_id:
       name: Entry ID
@@ -128,7 +128,7 @@ entrypoint_stream_stop:
 
 system_reboot:
   name: System reboot
-  description: Reboot the intercom host.
+  description: Reboot the companion host.
   fields:
     entry_id:
       name: Entry ID
