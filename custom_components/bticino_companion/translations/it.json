@@ -52,7 +52,6 @@
       "invalid_claim_code": "Claim code richiesto o non valido",
       "invalid_challenge": "Challenge Companion non valida o scaduta",
       "already_claimed": "Companion è già claimato",
-      "pairing_locked": "Pairing temporaneamente bloccato, riprova più tardi",
       "repair_code_invalid": "Repair code non valido o scaduto",
       "repair_not_allowed": "Reset del claim non consentito al momento",
       "invalid_url": "URL Companion non valido"
@@ -92,7 +91,6 @@
         "error": {
           "cannot_connect": "Impossibile connettersi a Companion",
           "invalid_auth": "Autenticazione fallita",
-          "pairing_locked": "Pairing temporaneamente bloccato, riprova più tardi",
           "repair_code_invalid": "Repair code non valido o scaduto",
           "repair_not_allowed": "Reset del claim non consentito al momento",
           "invalid_claim_code": "Claim code richiesto o non valido",

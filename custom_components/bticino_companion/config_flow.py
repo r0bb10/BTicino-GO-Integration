@@ -20,12 +20,9 @@ except ImportError:  # pragma: no cover - compatibility with older cores
 from .api import CompanionApiClient, CompanionApiError, CompanionAuthError
 from .const import (
     CONF_ACCESS_TOKEN,
-    CONF_ACCESS_TOKEN_EXPIRES_AT,
     CONF_CLAIM_CODE,
     CONF_COMPANION_URL,
     CONF_KEY_ID,
-    CONF_REFRESH_TOKEN,
-    CONF_REFRESH_TOKEN_EXPIRES_AT,
     CONF_REQUEST_TIMEOUT,
     CONF_VERIFY_SSL,
     DEFAULT_ACCESS_TOKEN,
@@ -73,7 +70,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                 result = await self._async_validate_or_claim(
                     companion_url=companion_url,
                     access_token=access_token,
-                    refresh_token="",
                     claim_code=claim_code,
                     verify_ssl=verify_ssl,
                     timeout=timeout,
@@ -91,9 +87,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_COMPANION_URL: companion_url,
                         CONF_ACCESS_TOKEN: result[CONF_ACCESS_TOKEN],
                         CONF_KEY_ID: result.get(CONF_KEY_ID, ""),
-                        CONF_REFRESH_TOKEN: result.get(CONF_REFRESH_TOKEN, ""),
-                        CONF_ACCESS_TOKEN_EXPIRES_AT: result.get(CONF_ACCESS_TOKEN_EXPIRES_AT, ""),
-                        CONF_REFRESH_TOKEN_EXPIRES_AT: result.get(CONF_REFRESH_TOKEN_EXPIRES_AT, ""),
                         CONF_VERIFY_SSL: verify_ssl,
                         CONF_REQUEST_TIMEOUT: timeout,
                     },
@@ -131,7 +124,7 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="cannot_connect")
 
         self._discovered_url = companion_url
-        self._discovered_device_name = _txt_property(discovery_info.properties, "name") or discovery_info.name
+        self._discovered_device_name = _discovery_title_from_zeroconf(discovery_info)
         self.context["title_placeholders"] = {"name": self._discovered_device_name or NAME}
         return await self.async_step_zeroconf_confirm()
 
@@ -150,7 +143,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                 result = await self._async_validate_or_claim(
                     companion_url=self._discovered_url,
                     access_token=access_token,
-                    refresh_token="",
                     claim_code=claim_code,
                     verify_ssl=DEFAULT_VERIFY_SSL,
                     timeout=DEFAULT_REQUEST_TIMEOUT,
@@ -168,9 +160,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_COMPANION_URL: self._discovered_url,
                         CONF_ACCESS_TOKEN: result[CONF_ACCESS_TOKEN],
                         CONF_KEY_ID: result.get(CONF_KEY_ID, ""),
-                        CONF_REFRESH_TOKEN: result.get(CONF_REFRESH_TOKEN, ""),
-                        CONF_ACCESS_TOKEN_EXPIRES_AT: result.get(CONF_ACCESS_TOKEN_EXPIRES_AT, ""),
-                        CONF_REFRESH_TOKEN_EXPIRES_AT: result.get(CONF_REFRESH_TOKEN_EXPIRES_AT, ""),
                         CONF_VERIFY_SSL: DEFAULT_VERIFY_SSL,
                         CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
                     },
@@ -198,7 +187,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
         companion_url = str(_entry_value(reauth_entry, CONF_COMPANION_URL, DEFAULT_COMPANION_URL))
         verify_ssl = bool(_entry_value(reauth_entry, CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
         timeout = float(_entry_value(reauth_entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT))
-        refresh_token = str(_entry_value(reauth_entry, CONF_REFRESH_TOKEN, "")).strip()
 
         if user_input is not None:
             access_token = str(user_input.get(CONF_ACCESS_TOKEN, "")).strip()
@@ -208,7 +196,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                 result = await self._async_validate_or_claim(
                     companion_url=companion_url,
                     access_token=access_token,
-                    refresh_token=refresh_token,
                     claim_code=claim_code,
                     verify_ssl=verify_ssl,
                     timeout=timeout,
@@ -225,9 +212,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                     data_updates={
                         CONF_ACCESS_TOKEN: result[CONF_ACCESS_TOKEN],
                         CONF_KEY_ID: result.get(CONF_KEY_ID, ""),
-                        CONF_REFRESH_TOKEN: result.get(CONF_REFRESH_TOKEN, ""),
-                        CONF_ACCESS_TOKEN_EXPIRES_AT: result.get(CONF_ACCESS_TOKEN_EXPIRES_AT, ""),
-                        CONF_REFRESH_TOKEN_EXPIRES_AT: result.get(CONF_REFRESH_TOKEN_EXPIRES_AT, ""),
                     },
                 )
 
@@ -247,7 +231,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
         companion_url_default = str(_entry_value(reconfigure_entry, CONF_COMPANION_URL, DEFAULT_COMPANION_URL))
         verify_ssl_default = bool(_entry_value(reconfigure_entry, CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
         timeout_default = float(_entry_value(reconfigure_entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT))
-        refresh_token_default = str(_entry_value(reconfigure_entry, CONF_REFRESH_TOKEN, "")).strip()
 
         if user_input is not None:
             companion_url = _normalize_url(str(user_input.get(CONF_COMPANION_URL, "")))
@@ -260,7 +243,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                 result = await self._async_validate_or_claim(
                     companion_url=companion_url,
                     access_token=access_token,
-                    refresh_token=refresh_token_default,
                     claim_code=claim_code,
                     verify_ssl=verify_ssl,
                     timeout=timeout,
@@ -279,9 +261,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_COMPANION_URL: companion_url,
                         CONF_ACCESS_TOKEN: result[CONF_ACCESS_TOKEN],
                         CONF_KEY_ID: result.get(CONF_KEY_ID, ""),
-                        CONF_REFRESH_TOKEN: result.get(CONF_REFRESH_TOKEN, ""),
-                        CONF_ACCESS_TOKEN_EXPIRES_AT: result.get(CONF_ACCESS_TOKEN_EXPIRES_AT, ""),
-                        CONF_REFRESH_TOKEN_EXPIRES_AT: result.get(CONF_REFRESH_TOKEN_EXPIRES_AT, ""),
                         CONF_VERIFY_SSL: verify_ssl,
                         CONF_REQUEST_TIMEOUT: timeout,
                     },
@@ -309,7 +288,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
         *,
         companion_url: str,
         access_token: str,
-        refresh_token: str,
         claim_code: str,
         verify_ssl: bool,
         timeout: float,
@@ -321,13 +299,12 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
             session=async_get_clientsession(self.hass),
             base_url=companion_url,
             access_token=access_token,
-            refresh_token=refresh_token,
             verify_ssl=verify_ssl,
             request_timeout=timeout,
         )
 
         await client.async_get_health()
-        auth_details = await client.async_get_auth_status(auth=bool(access_token or refresh_token))
+        auth_details = await client.async_get_auth_status(auth=bool(access_token))
 
         claim: dict[str, Any] = {}
         token_to_store = _auth_value(auth_details, "access_token") or access_token
@@ -371,20 +348,10 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
 
         final_access = _auth_value(auth_details, "access_token") or token_to_store
         key_id = _auth_value(auth_details, "key_id") or _auth_value(claim, "key_id")
-        refresh = _auth_value(auth_details, "refresh_token") or _auth_value(claim, "refresh_token")
-        access_expires = _auth_value(auth_details, "access_token_expires_at") or _auth_value(
-            claim, "access_token_expires_at"
-        )
-        refresh_expires = _auth_value(auth_details, "refresh_token_expires_at") or _auth_value(
-            claim, "refresh_token_expires_at"
-        )
 
         return {
             CONF_ACCESS_TOKEN: final_access,
             CONF_KEY_ID: key_id,
-            CONF_REFRESH_TOKEN: refresh,
-            CONF_ACCESS_TOKEN_EXPIRES_AT: access_expires,
-            CONF_REFRESH_TOKEN_EXPIRES_AT: refresh_expires,
             "unique_id": unique_id,
             "title_host": f"{host}:{port}",
         }
@@ -405,9 +372,6 @@ class CompanionOptionsFlow(OptionsFlow):
         current_timeout = float(_entry_value(self._entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT))
 
         current_key_id = str(_entry_value(self._entry, CONF_KEY_ID, "")).strip()
-        current_refresh = str(_entry_value(self._entry, CONF_REFRESH_TOKEN, "")).strip()
-        current_access_expires = str(_entry_value(self._entry, CONF_ACCESS_TOKEN_EXPIRES_AT, "")).strip()
-        current_refresh_expires = str(_entry_value(self._entry, CONF_REFRESH_TOKEN_EXPIRES_AT, "")).strip()
 
         if user_input is not None:
             companion_url = _normalize_url(str(user_input.get(CONF_COMPANION_URL, "")))
@@ -420,9 +384,6 @@ class CompanionOptionsFlow(OptionsFlow):
                 base_url=companion_url,
                 access_token=access_token,
                 key_id=current_key_id,
-                refresh_token=current_refresh,
-                access_token_expires_at=current_access_expires,
-                refresh_token_expires_at=current_refresh_expires,
                 verify_ssl=verify_ssl,
                 request_timeout=timeout,
             )
@@ -437,9 +398,6 @@ class CompanionOptionsFlow(OptionsFlow):
             else:
                 stored_access = _auth_value(auth_details, "access_token") or access_token
                 stored_key = _auth_value(auth_details, "key_id") or current_key_id
-                stored_refresh = _auth_value(auth_details, "refresh_token") or current_refresh
-                stored_access_exp = _auth_value(auth_details, "access_token_expires_at") or current_access_expires
-                stored_refresh_exp = _auth_value(auth_details, "refresh_token_expires_at") or current_refresh_expires
 
                 return self.async_create_entry(
                     title="",
@@ -447,9 +405,6 @@ class CompanionOptionsFlow(OptionsFlow):
                         CONF_COMPANION_URL: companion_url,
                         CONF_ACCESS_TOKEN: stored_access,
                         CONF_KEY_ID: stored_key,
-                        CONF_REFRESH_TOKEN: stored_refresh,
-                        CONF_ACCESS_TOKEN_EXPIRES_AT: stored_access_exp,
-                        CONF_REFRESH_TOKEN_EXPIRES_AT: stored_refresh_exp,
                         CONF_VERIFY_SSL: verify_ssl,
                         CONF_REQUEST_TIMEOUT: timeout,
                     },
@@ -562,6 +517,16 @@ def _txt_property(properties: Mapping[Any, Any], key: str) -> str | None:
     return value or None
 
 
+def _discovery_title_from_zeroconf(discovery_info: ZeroconfServiceInfo) -> str:
+    device_id = _txt_property(discovery_info.properties, "device_id")
+    if device_id:
+        return device_id
+    discovered_name = _txt_property(discovery_info.properties, "name")
+    if discovered_name:
+        return discovered_name
+    return discovery_info.name
+
+
 def _companion_url_from_discovery(discovery_info: ZeroconfServiceInfo) -> str | None:
     host = (
         _txt_property(discovery_info.properties, "host")
@@ -595,9 +560,6 @@ def _map_error(err: CompanionApiError) -> str:
         "token_required",
         "unauthorized",
         "invalid_auth",
-        "token_expired",
-        "refresh_token_expired",
-        "invalid_refresh_token",
     }:
         return "invalid_auth"
     if code in {
@@ -612,13 +574,6 @@ def _map_error(err: CompanionApiError) -> str:
         return "invalid_challenge"
     if code == "already_claimed":
         return "already_claimed"
-    if code in {
-        "rate_limit_ip",
-        "rate_limit_global",
-        "ip_locked",
-        "global_locked",
-    }:
-        return "pairing_locked"
     if code in {
         "invalid_repair_code",
         "repair_code_expired",

@@ -30,7 +30,6 @@
       "invalid_claim_code": "Claim code is required or invalid",
       "invalid_challenge": "Companion challenge is invalid or expired",
       "already_claimed": "Companion is already claimed",
-      "pairing_locked": "Pairing is temporarily locked, try again later",
       "repair_code_invalid": "Repair code is invalid or expired",
       "repair_not_allowed": "Claim reset is not currently allowed",
       "invalid_url": "Companion URL is invalid"
@@ -70,7 +69,6 @@
         "error": {
           "cannot_connect": "Cannot connect to companion",
           "invalid_auth": "Authentication failed",
-          "pairing_locked": "Pairing is temporarily locked, try again later",
           "repair_code_invalid": "Repair code is invalid or expired",
           "repair_not_allowed": "Claim reset is not currently allowed",
           "invalid_claim_code": "Claim code is required or invalid",

@@ -16,13 +16,10 @@ from homeassistant.helpers import issue_registry as ir
 
 from .api import CompanionApiClient, CompanionApiError
 from .const import (
-    CONF_ACCESS_TOKEN_EXPIRES_AT,
     CONF_ACCESS_TOKEN,
     CONF_COMPANION_URL,
     CONF_KEY_ID,
     CONF_REQUEST_TIMEOUT,
-    CONF_REFRESH_TOKEN,
-    CONF_REFRESH_TOKEN_EXPIRES_AT,
     CONF_VERIFY_SSL,
     DATA_SERVICES_REGISTERED,
     DEFAULT_ACCESS_TOKEN,
@@ -82,10 +79,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _async_persist_auth_state(auth_state: dict[str, str]) -> None:
         updates = {
             CONF_ACCESS_TOKEN: auth_state.get("access_token", ""),
-            CONF_REFRESH_TOKEN: auth_state.get("refresh_token", ""),
             CONF_KEY_ID: auth_state.get("key_id", ""),
-            CONF_ACCESS_TOKEN_EXPIRES_AT: auth_state.get("access_token_expires_at", ""),
-            CONF_REFRESH_TOKEN_EXPIRES_AT: auth_state.get("refresh_token_expires_at", ""),
         }
         merged = dict(entry.data)
         changed = False
@@ -101,9 +95,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         base_url=str(_entry_value(entry, CONF_COMPANION_URL, DEFAULT_COMPANION_URL)),
         access_token=str(_entry_value(entry, CONF_ACCESS_TOKEN, DEFAULT_ACCESS_TOKEN)),
         key_id=str(_entry_value(entry, CONF_KEY_ID, "")),
-        refresh_token=str(_entry_value(entry, CONF_REFRESH_TOKEN, "")),
-        access_token_expires_at=str(_entry_value(entry, CONF_ACCESS_TOKEN_EXPIRES_AT, "")),
-        refresh_token_expires_at=str(_entry_value(entry, CONF_REFRESH_TOKEN_EXPIRES_AT, "")),
         verify_ssl=bool(_entry_value(entry, CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)),
         request_timeout=float(_entry_value(entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT)),
         auth_state_listener=_async_persist_auth_state,
@@ -145,9 +136,6 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
         verify_ssl=bool(_entry_value(entry, CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)),
         request_timeout=float(_entry_value(entry, CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT)),
         key_id=str(_entry_value(entry, CONF_KEY_ID, "")),
-        refresh_token=str(_entry_value(entry, CONF_REFRESH_TOKEN, "")),
-        access_token_expires_at=str(_entry_value(entry, CONF_ACCESS_TOKEN_EXPIRES_AT, "")),
-        refresh_token_expires_at=str(_entry_value(entry, CONF_REFRESH_TOKEN_EXPIRES_AT, "")),
     )
     await runtime.coordinator.async_request_refresh()
     await runtime.coordinator.async_restart_event_stream()

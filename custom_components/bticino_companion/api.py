@@ -52,9 +52,6 @@ class CompanionApiClient:
         base_url: str,
         access_token: str,
         key_id: str = "",
-        refresh_token: str = "",
-        access_token_expires_at: str = "",
-        refresh_token_expires_at: str = "",
         verify_ssl: bool,
         request_timeout: float,
         auth_state_listener: Callable[[dict[str, str]], Awaitable[None]] | None = None,
@@ -63,13 +60,9 @@ class CompanionApiClient:
         self._base_url = base_url.rstrip("/")
         self._access_token = access_token.strip()
         self._key_id = key_id.strip()
-        self._refresh_token = refresh_token.strip()
-        self._access_token_expires_at = access_token_expires_at.strip()
-        self._refresh_token_expires_at = refresh_token_expires_at.strip()
         self._verify_ssl = verify_ssl
         self._request_timeout = request_timeout
         self._auth_state_listener = auth_state_listener
-        self._refresh_lock = asyncio.Lock()
 
     def update_runtime_config(
         self,
@@ -79,9 +72,6 @@ class CompanionApiClient:
         verify_ssl: bool,
         request_timeout: float,
         key_id: str | None = None,
-        refresh_token: str | None = None,
-        access_token_expires_at: str | None = None,
-        refresh_token_expires_at: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._access_token = access_token.strip()
@@ -89,12 +79,6 @@ class CompanionApiClient:
         self._request_timeout = request_timeout
         if key_id is not None:
             self._key_id = key_id.strip()
-        if refresh_token is not None:
-            self._refresh_token = refresh_token.strip()
-        if access_token_expires_at is not None:
-            self._access_token_expires_at = access_token_expires_at.strip()
-        if refresh_token_expires_at is not None:
-            self._refresh_token_expires_at = refresh_token_expires_at.strip()
 
     async def async_get_health(self) -> dict[str, Any]:
         return await self._async_request("GET", "/api/v2/health", auth=False)
@@ -130,21 +114,6 @@ class CompanionApiClient:
         response = await self._async_request("POST", "/api/v2/auth/revoke", auth=True, json_body=payload)
         await self._async_apply_auth_payload(response)
         return response
-
-    async def async_auth_refresh(self) -> dict[str, Any]:
-        refresh_token = self._refresh_token.strip()
-        if not refresh_token:
-            raise CompanionAuthError("refresh token is required", code="refresh_token_required", status=401)
-
-        payload = await self._async_request(
-            "POST",
-            "/api/v2/auth/refresh",
-            auth=False,
-            json_body={"refresh_token": refresh_token},
-            allow_refresh=False,
-        )
-        await self._async_apply_auth_payload(payload)
-        return payload
 
     async def async_issue_repair_code(self) -> dict[str, Any]:
         return await self._async_request("POST", "/api/v2/admin/issue-repair-code", auth=True)
@@ -273,7 +242,7 @@ class CompanionApiClient:
         return await self._async_request("POST", "/api/v2/control/system/update/rollback", auth=True)
 
     async def async_open_events_stream(self, *, last_event_id: int | None = None) -> ClientResponse:
-        if not self._access_token and not await self._async_try_refresh():
+        if not self._access_token:
             raise CompanionAuthError("access token is required for events stream")
 
         params: dict[str, str] = {}
@@ -281,7 +250,6 @@ class CompanionApiClient:
             params["last_event_id"] = str(last_event_id)
 
         url = f"{self._base_url}/api/v2/events"
-        attempted_refresh = False
         while True:
             headers = {
                 "Accept": "text/event-stream",
@@ -315,10 +283,6 @@ class CompanionApiClient:
                 response.release()
 
                 parsed = self._parse_error(payload, response.status)
-                if not attempted_refresh and self._can_refresh(parsed):
-                    attempted_refresh = True
-                    if await self._async_try_refresh():
-                        continue
 
                 raise CompanionAuthError(
                     parsed["message"],
@@ -336,7 +300,7 @@ class CompanionApiClient:
             return response
 
     async def async_open_openwebnet_trace_stream(self, *, last_event_id: int | None = None) -> ClientResponse:
-        if not self._access_token and not await self._async_try_refresh():
+        if not self._access_token:
             raise CompanionAuthError("access token is required for openwebnet trace stream")
 
         params: dict[str, str] = {}
@@ -344,7 +308,6 @@ class CompanionApiClient:
             params["last_event_id"] = str(last_event_id)
 
         url = f"{self._base_url}/api/v2/trace/openwebnet/stream"
-        attempted_refresh = False
         while True:
             headers = {
                 "Accept": "text/event-stream",
@@ -378,10 +341,6 @@ class CompanionApiClient:
                 response.release()
 
                 parsed = self._parse_error(payload, response.status)
-                if not attempted_refresh and self._can_refresh(parsed):
-                    attempted_refresh = True
-                    if await self._async_try_refresh():
-                        continue
 
                 raise CompanionAuthError(
                     parsed["message"],
@@ -405,9 +364,8 @@ class CompanionApiClient:
         *,
         auth: bool,
         json_body: dict[str, Any] | None = None,
-        allow_refresh: bool = True,
     ) -> dict[str, Any]:
-        if auth and not self._access_token and not (allow_refresh and await self._async_try_refresh()):
+        if auth and not self._access_token:
             raise CompanionAuthError("access token is required")
 
         headers = {
@@ -419,8 +377,6 @@ class CompanionApiClient:
             headers["Authorization"] = f"Bearer {self._access_token}"
 
         url = f"{self._base_url}{path}"
-        attempted_refresh = False
-
         for attempt in range(1, API_RETRY_ATTEMPTS + 1):
             try:
                 async with asyncio.timeout(self._request_timeout):
@@ -453,17 +409,6 @@ class CompanionApiClient:
 
             if response.status >= 400:
                 parsed = self._parse_error(payload, response.status)
-                if (
-                    auth
-                    and allow_refresh
-                    and response.status in (401, 403)
-                    and not attempted_refresh
-                    and self._can_refresh(parsed)
-                ):
-                    attempted_refresh = True
-                    if await self._async_try_refresh():
-                        headers["Authorization"] = f"Bearer {self._access_token}"
-                        continue
 
                 if response.status in (401, 403):
                     raise CompanionAuthError(
@@ -487,29 +432,6 @@ class CompanionApiClient:
 
         raise CompanionApiError(f"request retries exhausted for {url}")
 
-    def _can_refresh(self, parsed_error: dict[str, Any]) -> bool:
-        if not self._refresh_token:
-            return False
-        status = parsed_error.get("status")
-        if status not in (401, 403):
-            return False
-        code = str(parsed_error.get("code") or "").strip().lower()
-        if code in {"invalid_refresh_token", "refresh_token_expired", "refresh_token_required"}:
-            return False
-        return True
-
-    async def _async_try_refresh(self) -> bool:
-        if not self._refresh_token:
-            return False
-        async with self._refresh_lock:
-            if not self._refresh_token:
-                return False
-            try:
-                await self.async_auth_refresh()
-            except CompanionApiError:
-                return False
-            return True
-
     async def _async_apply_auth_payload(self, payload: dict[str, Any]) -> None:
         updates: dict[str, str] = {}
 
@@ -518,25 +440,10 @@ class CompanionApiClient:
             self._access_token = access_token
             updates["access_token"] = self._access_token
 
-        refresh_token = str(payload.get("refresh_token", "")).strip()
-        if refresh_token and refresh_token != self._refresh_token:
-            self._refresh_token = refresh_token
-            updates["refresh_token"] = self._refresh_token
-
         key_id = str(payload.get("key_id", "")).strip()
         if key_id and key_id != self._key_id:
             self._key_id = key_id
             updates["key_id"] = self._key_id
-
-        access_token_expires_at = str(payload.get("access_token_expires_at", "")).strip()
-        if access_token_expires_at and access_token_expires_at != self._access_token_expires_at:
-            self._access_token_expires_at = access_token_expires_at
-            updates["access_token_expires_at"] = self._access_token_expires_at
-
-        refresh_token_expires_at = str(payload.get("refresh_token_expires_at", "")).strip()
-        if refresh_token_expires_at and refresh_token_expires_at != self._refresh_token_expires_at:
-            self._refresh_token_expires_at = refresh_token_expires_at
-            updates["refresh_token_expires_at"] = self._refresh_token_expires_at
 
         if updates and self._auth_state_listener is not None:
             await self._auth_state_listener(updates)
