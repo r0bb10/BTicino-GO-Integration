@@ -30,6 +30,7 @@ from .const import (
 
 _T = TypeVar("_T")
 _LOGGER = logging.getLogger(__name__)
+_RING_ACTIVE_KEY = "_ring_active"
 
 
 class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -348,19 +349,21 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @staticmethod
     def _apply_state_transition(state: dict[str, Any], event_type: str, payload: Any = None) -> None:
         stream_active = bool(state.get("stream_active"))
-        ringing = bool(state.get("ringing"))
+        ring_active = bool(state.get(_RING_ACTIVE_KEY))
+        if not ring_active and str(state.get("call_state", "")).strip().lower() == "ringing":
+            ring_active = True
         audio = state.get("audio")
         if not isinstance(audio, dict):
             audio = {"muted": False}
             state["audio"] = audio
 
         if event_type in ("ring.started", "call.incoming"):
+            state[_RING_ACTIVE_KEY] = True
             state["call_state"] = "ringing"
-            state["ringing"] = True
             return
 
         if event_type == "ring.ended":
-            state["ringing"] = False
+            state[_RING_ACTIVE_KEY] = False
             state["call_state"] = "active" if stream_active else "idle"
             return
 
@@ -371,7 +374,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if event_type == "call.ended":
             if stream_active:
                 state["call_state"] = "active"
-            elif ringing:
+            elif ring_active:
                 state["call_state"] = "ringing"
             else:
                 state["call_state"] = "idle"
@@ -384,7 +387,7 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if event_type == "stream.stopped":
             state["stream_active"] = False
-            state["call_state"] = "ringing" if ringing else "idle"
+            state["call_state"] = "ringing" if ring_active else "idle"
             return
 
         if event_type == "audio.muted":
@@ -433,12 +436,12 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         if event_type == "stream.stopped":
-            if not bool(state.get("ringing")):
+            if not CompanionCoordinator._is_ringing_state(state):
                 state["active_entrypoint"] = "none"
             return
 
         if event_type == "call.ended":
-            if not bool(state.get("stream_active")) and not bool(state.get("ringing")):
+            if not bool(state.get("stream_active")) and not CompanionCoordinator._is_ringing_state(state):
                 state["active_entrypoint"] = "none"
 
     def _runtime_snapshot(self) -> dict[str, Any]:
@@ -499,8 +502,14 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             normalized["active_entrypoint"] = active.strip()
         if not isinstance(normalized.get("call_state"), str) or not str(normalized.get("call_state", "")).strip():
             normalized["call_state"] = "idle"
+        else:
+            normalized["call_state"] = str(normalized.get("call_state", "")).strip().lower()
         normalized["stream_active"] = bool(normalized.get("stream_active", False))
-        normalized["ringing"] = bool(normalized.get("ringing", False))
+        ring_active = bool(normalized.get(_RING_ACTIVE_KEY))
+        if normalized["call_state"] == "ringing":
+            ring_active = True
+        normalized[_RING_ACTIVE_KEY] = ring_active
+        normalized.pop("ringing", None)
         audio = normalized.get("audio")
         if not isinstance(audio, dict):
             audio = {}
@@ -515,6 +524,13 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "welcome_message_enabled": bool(voicemail.get("welcome_message_enabled", False)),
         }
         return normalized
+
+    @staticmethod
+    def _is_ringing_state(state: dict[str, Any]) -> bool:
+        if not isinstance(state, dict):
+            return False
+        call_state = str(state.get("call_state", "")).strip().lower()
+        return call_state == "ringing"
 
     @staticmethod
     def _normalize_system_control(payload: Any) -> dict[str, Any]:

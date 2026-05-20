@@ -87,10 +87,6 @@ def _wifi_strength(data: dict[str, Any]) -> int | None:
     value = network.get("wifi_strength")
     if isinstance(value, (int, float)):
         return max(0, min(100, int(value)))
-    value = network.get("wifi_rssi")
-    if isinstance(value, (int, float)):
-        # Backward compatibility when companion still emits only wifi_rssi.
-        return max(0, min(100, int(value)))
     return None
 
 

@@ -32,7 +32,7 @@ SENSORS: tuple[CompanionBinarySensorDescription, ...] = (
         icon="mdi:bell-ring",
         device_class=None,
         entity_category=None,
-        value_fn=lambda data, _coordinator: bool(data.get("state", {}).get("ringing", False)),
+        value_fn=lambda data, _coordinator: str(data.get("state", {}).get("call_state", "")).strip().lower() == "ringing",
     ),
 )
 
