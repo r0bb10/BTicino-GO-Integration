@@ -110,7 +110,6 @@ class CompanionFirmwareUpdateEntity(CoordinatorEntity, UpdateEntity):
                 if value is not None:
                     attrs[key] = value
 
-        attrs["allow_apply"] = bool(self._update_control.get("allow_apply", False))
         attrs["allow_rollback"] = bool(self._update_control.get("allow_rollback", False))
         return attrs
 
@@ -118,13 +117,10 @@ class CompanionFirmwareUpdateEntity(CoordinatorEntity, UpdateEntity):
         if version is not None:
             raise HomeAssistantError("Installing a specific version is not supported.")
 
-        if not bool(self._update_control.get("allow_apply", False)):
-            raise HomeAssistantError("Update apply is disabled in companion config.")
-
         try:
             await self.coordinator.async_run_command(
                 label="Update check",
-                command_coro_factory=lambda: self._client.async_update_check(force=True),
+                command_coro_factory=self._client.async_update_check,
             )
             await self.coordinator.async_run_command(
                 label="Update apply",

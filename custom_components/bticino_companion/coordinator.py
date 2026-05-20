@@ -556,7 +556,6 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "update": {
                 "enabled": bool(update_payload.get("enabled", False)),
                 "exposed": bool(update_payload.get("exposed", False)),
-                "allow_apply": bool(update_payload.get("allow_apply", False)),
                 "allow_rollback": bool(update_payload.get("allow_rollback", False)),
                 "status": update_status,
             },

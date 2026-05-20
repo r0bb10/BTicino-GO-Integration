@@ -196,14 +196,11 @@ class CompanionApiClient:
     async def async_update_check(
         self,
         *,
-        force: bool = False,
         available_version: str | None = None,
         artifact_path: str | None = None,
         sha256: str | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {}
-        if force:
-            payload["force"] = True
         if available_version is not None:
             payload["available_version"] = str(available_version).strip()
         if artifact_path is not None:
