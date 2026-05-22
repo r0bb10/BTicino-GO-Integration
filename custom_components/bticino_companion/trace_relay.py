@@ -6,6 +6,7 @@ import asyncio
 from contextlib import suppress
 import json
 import logging
+import time
 from typing import Any
 
 from aiohttp import ClientConnectionError, ClientPayloadError, ClientResponse
@@ -13,7 +14,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .api import CompanionApiClient, CompanionApiError, CompanionAuthError
-from .const import DOMAIN, EVENT_OPENWEBNET_FRAME, SIGNAL_OPENWEBNET_TRACE
+from .const import (
+    DOMAIN,
+    EVENT_OPENWEBNET_FRAME,
+    SIGNAL_OPENWEBNET_TRACE,
+    SSE_HEARTBEAT_TIMEOUT_SECONDS,
+    SSE_READLINE_TIMEOUT_SECONDS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +39,7 @@ class OpenWebNetTraceRelay:
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
         self._last_event_id = 0
+        self._last_activity = 0.0
 
     async def async_start(self) -> None:
         if self._task and not self._task.done():
@@ -70,6 +78,7 @@ class OpenWebNetTraceRelay:
                     last_event_id=self._last_event_id if self._last_event_id > 0 else None,
                 )
                 reconnect_delay = 1.0
+                self._last_activity = time.monotonic()
                 await self._async_consume(response)
             except asyncio.CancelledError:
                 raise
@@ -98,9 +107,19 @@ class OpenWebNetTraceRelay:
         data_lines: list[str] = []
 
         while not response.content.at_eof():
-            raw_line = await response.content.readline()
+            try:
+                raw_line = await asyncio.wait_for(
+                    response.content.readline(),
+                    timeout=SSE_READLINE_TIMEOUT_SECONDS,
+                )
+            except TimeoutError as err:
+                now = time.monotonic()
+                if self._last_activity > 0 and (now - self._last_activity) >= SSE_HEARTBEAT_TIMEOUT_SECONDS:
+                    raise ClientPayloadError("OpenWebNet trace stream became stale") from err
+                continue
             if raw_line == b"":
                 break
+            self._last_activity = time.monotonic()
             line = raw_line.decode(errors="ignore").rstrip("\r\n")
             if line == "":
                 self._dispatch(data_lines)
