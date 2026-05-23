@@ -1,7 +1,7 @@
 # BTicino Integration for Home Assistant
 
 [![GitHub Release](https://img.shields.io/github/v/release/r0bb10/BTicino-GO-Integration)](https://github.com/r0bb10/BTicino-GO-Integration/releases/latest)
-[![CI](https://github.com/r0bb10/BTicino-GO-Integration/actions/workflows/validate.yml/badge.svg)](https://github.com/r0bb10/BTicino-GO-Integration/actions/workflows/validate.yml)
+[![Release](https://github.com/r0bb10/BTicino-GO-Integration/actions/workflows/release.yml/badge.svg)](https://github.com/r0bb10/BTicino-GO-Integration/actions/workflows/release.yml)
 [![GitHub Issues](https://img.shields.io/github/issues/r0bb10/BTicino-GO-Integration)](https://github.com/r0bb10/BTicino-GO-Integration/issues)
 [![License](https://img.shields.io/github/license/r0bb10/BTicino-GO-Integration)](LICENSE)
 [![Top Language](https://img.shields.io/github/languages/top/r0bb10/BTicino-GO-Integration)](https://www.python.org/)
