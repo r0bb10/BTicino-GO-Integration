@@ -112,7 +112,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     trace_relay = OpenWebNetTraceRelay(hass, client, entry.entry_id)
     await trace_relay.async_start()
-    webrtc_sessions = CompanionWebRTCSessionManager(hass=hass, client=client, coordinator=coordinator)
+    webrtc_sessions = CompanionWebRTCSessionManager(hass=hass)
 
     runtime = IntegrationRuntime(
         client=client,
