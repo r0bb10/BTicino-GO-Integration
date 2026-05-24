@@ -38,8 +38,6 @@ SERVICE_AUDIO_UNMUTE = "audio_unmute"
 SERVICE_VOICEMAIL_ENABLE = "voicemail_enable"
 SERVICE_VOICEMAIL_DISABLE = "voicemail_disable"
 SERVICE_ENTRYPOINT_UNLOCK = "entrypoint_unlock"
-SERVICE_ENTRYPOINT_STREAM_START = "entrypoint_stream_start"
-SERVICE_ENTRYPOINT_STREAM_STOP = "entrypoint_stream_stop"
 SERVICE_SYSTEM_REBOOT = "system_reboot"
 
 DATA_SERVICES_REGISTERED = f"{DOMAIN}_services_registered"

@@ -35,14 +35,13 @@ from .const import (
     SERVICE_AUDIO_UNMUTE,
     SERVICE_VOICEMAIL_ENABLE,
     SERVICE_VOICEMAIL_DISABLE,
-    SERVICE_ENTRYPOINT_STREAM_START,
-    SERVICE_ENTRYPOINT_STREAM_STOP,
     SERVICE_ENTRYPOINT_UNLOCK,
     SERVICE_SYSTEM_REBOOT,
     SERVICE_REFRESH,
 )
 from .coordinator import CompanionCoordinator
 from .trace_relay import OpenWebNetTraceRelay
+from .webrtc import CompanionWebRTCSessionManager
 
 
 @dataclass(slots=True)
@@ -52,6 +51,7 @@ class IntegrationRuntime:
     client: CompanionApiClient
     coordinator: CompanionCoordinator
     trace_relay: OpenWebNetTraceRelay
+    webrtc_sessions: CompanionWebRTCSessionManager
 
 
 SERVICE_SCHEMA_ENTRY = vol.Schema({vol.Optional("entry_id"): str})
@@ -112,8 +112,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     trace_relay = OpenWebNetTraceRelay(hass, client, entry.entry_id)
     await trace_relay.async_start()
+    webrtc_sessions = CompanionWebRTCSessionManager(hass=hass, client=client, coordinator=coordinator)
 
-    runtime = IntegrationRuntime(client=client, coordinator=coordinator, trace_relay=trace_relay)
+    runtime = IntegrationRuntime(
+        client=client,
+        coordinator=coordinator,
+        trace_relay=trace_relay,
+        webrtc_sessions=webrtc_sessions,
+    )
     entry.runtime_data = runtime
     hass.data[DOMAIN][entry.entry_id] = runtime
     _delete_claim_recovery_issue(hass, entry.entry_id)
@@ -225,24 +231,6 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             lambda: runtime.client.async_entrypoint_unlock(entrypoint_id),
         )
 
-    async def _handle_entrypoint_stream_start(call: ServiceCall) -> None:
-        runtime = await _resolve_runtime(call)
-        entrypoint_id = str(call.data["entrypoint_id"]).strip()
-        await _run_command(
-            "Entrypoint stream start",
-            call,
-            lambda: runtime.client.async_entrypoint_stream_start(entrypoint_id),
-        )
-
-    async def _handle_entrypoint_stream_stop(call: ServiceCall) -> None:
-        runtime = await _resolve_runtime(call)
-        entrypoint_id = str(call.data["entrypoint_id"]).strip()
-        await _run_command(
-            "Entrypoint stream stop",
-            call,
-            lambda: runtime.client.async_entrypoint_stream_stop(entrypoint_id),
-        )
-
     async def _handle_system_reboot(call: ServiceCall) -> None:
         runtime = await _resolve_runtime(call)
         await _run_command(
@@ -268,18 +256,6 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         _handle_entrypoint_unlock,
         schema=SERVICE_SCHEMA_ENTRYPOINT,
     )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ENTRYPOINT_STREAM_START,
-        _handle_entrypoint_stream_start,
-        schema=SERVICE_SCHEMA_ENTRYPOINT,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ENTRYPOINT_STREAM_STOP,
-        _handle_entrypoint_stream_stop,
-        schema=SERVICE_SCHEMA_ENTRYPOINT,
-    )
     hass.services.async_register(DOMAIN, SERVICE_SYSTEM_REBOOT, _handle_system_reboot, schema=SERVICE_SCHEMA_ENTRY)
 
     hass.data[DATA_SERVICES_REGISTERED] = True
@@ -298,8 +274,6 @@ async def _async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_VOICEMAIL_ENABLE,
         SERVICE_VOICEMAIL_DISABLE,
         SERVICE_ENTRYPOINT_UNLOCK,
-        SERVICE_ENTRYPOINT_STREAM_START,
-        SERVICE_ENTRYPOINT_STREAM_STOP,
         SERVICE_SYSTEM_REBOOT,
     ):
         if hass.services.has_service(DOMAIN, service):

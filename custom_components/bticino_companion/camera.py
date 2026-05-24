@@ -6,11 +6,12 @@ import logging
 from typing import Any
 from urllib.parse import urlsplit
 
-from homeassistant.components.camera import Camera, CameraEntityFeature
+from homeassistant.components.camera import Camera, CameraEntityFeature, WebRTCSendMessage
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from webrtc_models import RTCIceCandidateInit
 
 from . import IntegrationRuntime
 from .api import CompanionApiError
@@ -91,10 +92,11 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
         self._entrypoint_id = entrypoint_id
         self._devaddr = devaddr
         self._client = entry.runtime_data.client
+        self._webrtc_sessions = entry.runtime_data.webrtc_sessions
         self._companion_url = str(entry.options.get(CONF_COMPANION_URL, entry.data.get(CONF_COMPANION_URL, DEFAULT_COMPANION_URL))).strip()
         self._attr_name = entrypoint_label
         self._attr_unique_id = f"{entry.entry_id}_entrypoint_camera_{entrypoint_id}"
-        self.stream_options["rtsp_transport"] = "tcp"
+        self._active_webrtc_sessions: set[str] = set()
 
     @property
     def device_info(self):
@@ -123,6 +125,39 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
 
     async def stream_source(self) -> str | None:
         return _build_rtsp_stream_url(self._companion_url, self.coordinator.data, self._entrypoint_id)
+
+    async def async_handle_async_webrtc_offer(
+        self,
+        offer_sdp: str,
+        session_id: str,
+        send_message: WebRTCSendMessage,
+    ) -> None:
+        self._active_webrtc_sessions.add(session_id)
+        try:
+            await self._webrtc_sessions.async_handle_offer(
+                camera=self,
+                entrypoint_id=self._entrypoint_id,
+                offer_sdp=offer_sdp,
+                session_id=session_id,
+                send_message=send_message,
+            )
+        except Exception:
+            self._active_webrtc_sessions.discard(session_id)
+            raise
+
+    async def async_on_webrtc_candidate(self, session_id: str, candidate: RTCIceCandidateInit) -> None:
+        await self._webrtc_sessions.async_on_candidate(session_id=session_id, candidate=candidate)
+
+    @callback
+    def close_webrtc_session(self, session_id: str) -> None:
+        self._active_webrtc_sessions.discard(session_id)
+        self._webrtc_sessions.close_session(session_id)
+
+    async def async_will_remove_from_hass(self) -> None:
+        for session_id in list(self._active_webrtc_sessions):
+            self.close_webrtc_session(session_id)
+        self._active_webrtc_sessions.clear()
+        await super().async_will_remove_from_hass()
 
     async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
         del width, height
