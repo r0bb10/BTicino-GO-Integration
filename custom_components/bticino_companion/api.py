@@ -256,6 +256,52 @@ class CompanionApiClient:
     async def async_update_rollback(self) -> dict[str, Any]:
         return await self._async_request("POST", "/api/v2/control/system/update/rollback", auth=True)
 
+    async def async_webrtc_offer(
+        self,
+        *,
+        entrypoint_id: str,
+        offer_sdp: str,
+        session_id: str,
+    ) -> dict[str, Any]:
+        payload = {
+            "session_id": session_id,
+            "entrypoint_id": entrypoint_id,
+            "offer_sdp": offer_sdp,
+        }
+        return await self._async_request(
+            "POST",
+            "/api/v2/webrtc/offer",
+            auth=True,
+            json_body=payload,
+            request_timeout=max(self._request_timeout, 20.0),
+        )
+
+    async def async_webrtc_candidate(
+        self,
+        *,
+        session_id: str,
+        candidate: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = {
+            "session_id": session_id,
+            "candidate": candidate,
+        }
+        return await self._async_request(
+            "POST",
+            "/api/v2/webrtc/candidate",
+            auth=True,
+            json_body=payload,
+        )
+
+    async def async_webrtc_close(self, *, session_id: str) -> dict[str, Any]:
+        payload = {"session_id": session_id}
+        return await self._async_request(
+            "POST",
+            "/api/v2/webrtc/close",
+            auth=True,
+            json_body=payload,
+        )
+
     async def async_open_events_stream(self, *, last_event_id: int | None = None) -> ClientResponse:
         if not self._access_token:
             raise CompanionAuthError("access token is required for events stream")

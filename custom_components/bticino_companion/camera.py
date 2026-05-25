@@ -6,7 +6,14 @@ import logging
 from typing import Any
 from urllib.parse import urlsplit
 
-from homeassistant.components.camera import Camera, CameraEntityFeature, WebRTCSendMessage
+from homeassistant.components.camera import (
+    Camera,
+    CameraEntityFeature,
+    WebRTCAnswer,
+    WebRTCCandidate,
+    WebRTCError,
+    WebRTCSendMessage,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -92,7 +99,6 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
         self._entrypoint_id = entrypoint_id
         self._devaddr = devaddr
         self._client = entry.runtime_data.client
-        self._webrtc_sessions = entry.runtime_data.webrtc_sessions
         self._companion_url = str(entry.options.get(CONF_COMPANION_URL, entry.data.get(CONF_COMPANION_URL, DEFAULT_COMPANION_URL))).strip()
         self._attr_name = entrypoint_label
         self._attr_unique_id = f"{entry.entry_id}_entrypoint_camera_{entrypoint_id}"
@@ -133,25 +139,48 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
         send_message: WebRTCSendMessage,
     ) -> None:
         self._active_webrtc_sessions.add(session_id)
-        try:
-            await self._webrtc_sessions.async_handle_offer(
-                camera=self,
-                entrypoint_id=self._entrypoint_id,
-                offer_sdp=offer_sdp,
-                session_id=session_id,
-                send_message=send_message,
-            )
-        except Exception:
+        normalized_offer = _canonicalize_sdp(offer_sdp)
+        if not normalized_offer:
             self._active_webrtc_sessions.discard(session_id)
-            raise
+            send_message(WebRTCError("webrtc_offer_failed", "empty offer_sdp"))
+            return
+        try:
+            response = await self._client.async_webrtc_offer(
+                entrypoint_id=self._entrypoint_id,
+                offer_sdp=normalized_offer,
+                session_id=session_id,
+            )
+        except CompanionApiError as err:
+            self._active_webrtc_sessions.discard(session_id)
+            send_message(WebRTCError("webrtc_offer_failed", str(err)))
+            return
+
+        answer_sdp = _canonicalize_sdp(response.get("answer_sdp", ""))
+        if not answer_sdp:
+            self._active_webrtc_sessions.discard(session_id)
+            send_message(WebRTCError("webrtc_offer_failed", "companion returned empty answer_sdp"))
+            return
+
+        send_message(WebRTCAnswer(answer_sdp))
+        candidates = response.get("candidates")
+        if not isinstance(candidates, list):
+            return
+        for raw in candidates:
+            if not isinstance(raw, dict):
+                continue
+            candidate = _candidate_from_payload(raw)
+            if candidate is None:
+                continue
+            send_message(WebRTCCandidate(candidate))
 
     async def async_on_webrtc_candidate(self, session_id: str, candidate: RTCIceCandidateInit) -> None:
-        await self._webrtc_sessions.async_on_candidate(session_id=session_id, candidate=candidate)
+        payload = _candidate_to_payload(candidate)
+        await self._client.async_webrtc_candidate(session_id=session_id, candidate=payload)
 
     @callback
     def close_webrtc_session(self, session_id: str) -> None:
         self._active_webrtc_sessions.discard(session_id)
-        self._webrtc_sessions.close_session(session_id)
+        self.hass.async_create_task(self._client.async_webrtc_close(session_id=session_id))
 
     async def async_will_remove_from_hass(self) -> None:
         for session_id in list(self._active_webrtc_sessions):
@@ -220,3 +249,47 @@ def _positive_port(raw: Any, fallback: int) -> int:
     if port <= 0 or port > 65535:
         return fallback
     return port
+
+
+def _candidate_to_payload(candidate: RTCIceCandidateInit) -> dict[str, Any]:
+    payload = candidate.to_dict()
+    out: dict[str, Any] = {"candidate": str(payload.get("candidate", "")).strip()}
+    sdp_mid = payload.get("sdpMid")
+    if isinstance(sdp_mid, str) and sdp_mid.strip():
+        out["sdpMid"] = sdp_mid.strip()
+    sdp_mline = payload.get("sdpMLineIndex")
+    if isinstance(sdp_mline, int):
+        out["sdpMLineIndex"] = sdp_mline
+    username_fragment = payload.get("usernameFragment")
+    if isinstance(username_fragment, str) and username_fragment.strip():
+        out["usernameFragment"] = username_fragment.strip()
+    return out
+
+
+def _candidate_from_payload(raw: dict[str, Any]) -> RTCIceCandidateInit | None:
+    candidate = str(raw.get("candidate", "")).strip()
+    if not candidate:
+        return None
+    payload: dict[str, Any] = {"candidate": candidate}
+    sdp_mid = raw.get("sdpMid")
+    if isinstance(sdp_mid, str) and sdp_mid.strip():
+        payload["sdpMid"] = sdp_mid.strip()
+    sdp_mline = raw.get("sdpMLineIndex")
+    if isinstance(sdp_mline, int):
+        payload["sdpMLineIndex"] = sdp_mline
+    username_fragment = raw.get("usernameFragment")
+    if isinstance(username_fragment, str) and username_fragment.strip():
+        payload["usernameFragment"] = username_fragment.strip()
+    try:
+        return RTCIceCandidateInit.from_dict(payload)
+    except Exception:
+        return None
+
+
+def _canonicalize_sdp(raw: Any) -> str:
+    text = str(raw or "")
+    text = text.strip(" \t\r\n")
+    if not text:
+        return ""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("\n", "\r\n") + "\r\n"

@@ -41,7 +41,6 @@ from .const import (
 )
 from .coordinator import CompanionCoordinator
 from .trace_relay import OpenWebNetTraceRelay
-from .webrtc import CompanionWebRTCSessionManager
 
 
 @dataclass(slots=True)
@@ -51,7 +50,6 @@ class IntegrationRuntime:
     client: CompanionApiClient
     coordinator: CompanionCoordinator
     trace_relay: OpenWebNetTraceRelay
-    webrtc_sessions: CompanionWebRTCSessionManager
 
 
 SERVICE_SCHEMA_ENTRY = vol.Schema({vol.Optional("entry_id"): str})
@@ -112,13 +110,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     trace_relay = OpenWebNetTraceRelay(hass, client, entry.entry_id)
     await trace_relay.async_start()
-    webrtc_sessions = CompanionWebRTCSessionManager(hass=hass)
-
     runtime = IntegrationRuntime(
         client=client,
         coordinator=coordinator,
         trace_relay=trace_relay,
-        webrtc_sessions=webrtc_sessions,
     )
     entry.runtime_data = runtime
     hass.data[DOMAIN][entry.entry_id] = runtime
