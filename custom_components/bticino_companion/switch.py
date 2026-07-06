@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import IntegrationRuntime
 from .coordinator import CompanionCoordinator
 from .device_info import build_device_info
+from .entity_registry import reconcile_platform_entities
 
 
 async def async_setup_entry(
@@ -23,12 +24,45 @@ async def async_setup_entry(
     runtime: IntegrationRuntime = entry.runtime_data
     coordinator = runtime.coordinator
     client = runtime.client
-    entities: list[SwitchEntity] = []
+    known_unique_ids: set[str] = set()
+
+    def _sync_switches() -> None:
+        desired_unique_ids = _desired_switch_unique_ids(entry, coordinator)
+        reconcile_platform_entities(
+            hass,
+            entry,
+            platform_domain="switch",
+            desired_unique_ids=desired_unique_ids,
+            managed_unique_ids={
+                f"{entry.entry_id}_mute",
+                f"{entry.entry_id}_voicemail",
+            },
+        )
+
+        entities: list[SwitchEntity] = []
+        mute_unique_id = f"{entry.entry_id}_mute"
+        if mute_unique_id in desired_unique_ids and mute_unique_id not in known_unique_ids:
+            known_unique_ids.add(mute_unique_id)
+            entities.append(CompanionMuteSwitch(entry, coordinator, client))
+        voicemail_unique_id = f"{entry.entry_id}_voicemail"
+        if voicemail_unique_id in desired_unique_ids and voicemail_unique_id not in known_unique_ids:
+            known_unique_ids.add(voicemail_unique_id)
+            entities.append(CompanionVoicemailSwitch(entry, coordinator, client))
+
+        if entities:
+            async_add_entities(entities)
+
+    _sync_switches()
+    entry.async_on_unload(coordinator.async_add_listener(_sync_switches))
+
+
+def _desired_switch_unique_ids(entry: ConfigEntry, coordinator: CompanionCoordinator) -> set[str]:
+    desired: set[str] = set()
     if _supports_mute(coordinator):
-        entities.append(CompanionMuteSwitch(entry, coordinator, client))
+        desired.add(f"{entry.entry_id}_mute")
     if _supports_voicemail(coordinator):
-        entities.append(CompanionVoicemailSwitch(entry, coordinator, client))
-    async_add_entities(entities)
+        desired.add(f"{entry.entry_id}_voicemail")
+    return desired
 
 
 def _supports_mute(coordinator: CompanionCoordinator) -> bool:
@@ -78,7 +112,7 @@ class CompanionMuteSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity)
 
     @property
     def available(self) -> bool:
-        return self.coordinator.entities_available
+        return self.coordinator.entities_available and _supports_mute(self.coordinator)
 
     @property
     def is_on(self) -> bool:

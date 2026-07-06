@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import CompanionApiError
 from .device_info import build_device_info
+from .entity_registry import reconcile_platform_entities
 
 _IN_PROGRESS_STAGES = {"checking", "applying", "restarting", "rollback"}
 _UPDATE_APPLY_COMMAND_TIMEOUT_SECONDS = 120.0
@@ -31,7 +32,41 @@ async def async_setup_entry(
     runtime = entry.runtime_data
     coordinator = runtime.coordinator
     client = runtime.client
-    async_add_entities([CompanionFirmwareUpdateEntity(entry, coordinator, client)])
+    update_added = False
+
+    def _sync_update_entity() -> None:
+        nonlocal update_added
+        desired_unique_ids = _desired_update_unique_ids(entry, coordinator)
+        reconcile_platform_entities(
+            hass,
+            entry,
+            platform_domain="update",
+            desired_unique_ids=desired_unique_ids,
+            managed_unique_ids={f"{entry.entry_id}_companion_firmware_update"},
+        )
+        if desired_unique_ids and not update_added:
+            update_added = True
+            async_add_entities([CompanionFirmwareUpdateEntity(entry, coordinator, client)])
+
+    _sync_update_entity()
+    entry.async_on_unload(coordinator.async_add_listener(_sync_update_entity))
+
+
+def _desired_update_unique_ids(entry: ConfigEntry, coordinator) -> set[str]:
+    if _supports_update_control(coordinator):
+        return {f"{entry.entry_id}_companion_firmware_update"}
+    return set()
+
+
+def _supports_update_control(coordinator) -> bool:
+    data = coordinator.data if isinstance(coordinator.data, dict) else {}
+    system_control = data.get("system_control", {}) if isinstance(data, dict) else {}
+    if not isinstance(system_control, dict):
+        return False
+    update = system_control.get("update", {})
+    if not isinstance(update, dict):
+        return False
+    return bool(update.get("enabled", False)) and bool(update.get("exposed", False))
 
 
 class CompanionFirmwareUpdateEntity(CoordinatorEntity, UpdateEntity):

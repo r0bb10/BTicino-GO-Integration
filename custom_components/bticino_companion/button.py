@@ -17,6 +17,7 @@ from . import IntegrationRuntime
 from .api import CompanionApiClient, CompanionApiError
 from .coordinator import CompanionCoordinator
 from .device_info import build_device_info
+from .entity_registry import reconcile_platform_entities
 
 _COMPANION_RESTART_VERIFY_ATTEMPTS = 30
 _COMPANION_RESTART_VERIFY_DELAY_SECONDS = 1.0
@@ -38,10 +39,22 @@ async def async_setup_entry(
     def _sync_buttons() -> None:
         nonlocal reboot_added
         data = coordinator.data if isinstance(coordinator.data, dict) else {}
+        reconcile_platform_entities(
+            hass,
+            entry,
+            platform_domain="button",
+            desired_unique_ids=_desired_button_unique_ids(entry, data),
+            managed_unique_ids={f"{entry.entry_id}_system_reboot"},
+            managed_unique_id_prefixes={
+                f"{entry.entry_id}_entrypoint_unlock_",
+                f"{entry.entry_id}_system_service_restart_",
+            },
+        )
+
         entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
         rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
         if not isinstance(rows, list):
-            return
+            rows = []
 
         new_entities: list[CompanionEntrypointUnlockButton] = []
         for row in rows:
@@ -114,6 +127,50 @@ async def async_setup_entry(
     entry.async_on_unload(coordinator.async_add_listener(_sync_buttons))
 
 
+def _desired_button_unique_ids(entry: ConfigEntry, data: dict[str, Any]) -> set[str]:
+    desired: set[str] = set()
+    entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
+    rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict) or row.get("has_unlock") is False:
+                continue
+            entrypoint_id = str(row.get("id", "")).strip()
+            if entrypoint_id:
+                desired.add(f"{entry.entry_id}_entrypoint_unlock_{entrypoint_id}")
+
+    system_control = data.get("system_control", {}) if isinstance(data, dict) else {}
+    if not isinstance(system_control, dict):
+        return desired
+
+    if bool(system_control.get("reboot_enabled", False)):
+        desired.add(f"{entry.entry_id}_system_reboot")
+
+    services = system_control.get("services", {})
+    if isinstance(services, dict):
+        for raw_name, raw_cfg in services.items():
+            service_name = str(raw_name).strip().lower()
+            if not service_name or not isinstance(raw_cfg, dict):
+                continue
+            if bool(raw_cfg.get("enabled", False)) and bool(raw_cfg.get("exposed", False)):
+                desired.add(f"{entry.entry_id}_system_service_restart_{service_name}")
+    return desired
+
+
+def _entrypoint_supports_unlock(coordinator: CompanionCoordinator, entrypoint_id: str) -> bool:
+    data = coordinator.data if isinstance(coordinator.data, dict) else {}
+    entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
+    rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
+    if not isinstance(rows, list):
+        return False
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("id", "")).strip() == entrypoint_id:
+            return row.get("has_unlock") is not False
+    return False
+
+
 class CompanionEntrypointUnlockButton(CoordinatorEntity[CompanionCoordinator], ButtonEntity):
     """Button to unlock a specific entrypoint."""
 
@@ -133,7 +190,7 @@ class CompanionEntrypointUnlockButton(CoordinatorEntity[CompanionCoordinator], B
         self._entry = entry
         self._client = client
         self._entrypoint_id = entrypoint_id
-        self._attr_name = f"Unlock {entrypoint_label}"
+        self._attr_name = entrypoint_label
         self._attr_unique_id = f"{entry.entry_id}_entrypoint_unlock_{entrypoint_id}"
 
     @property
@@ -142,7 +199,10 @@ class CompanionEntrypointUnlockButton(CoordinatorEntity[CompanionCoordinator], B
 
     @property
     def available(self) -> bool:
-        return self.coordinator.entities_available
+        return self.coordinator.entities_available and _entrypoint_supports_unlock(
+            self.coordinator,
+            self._entrypoint_id,
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

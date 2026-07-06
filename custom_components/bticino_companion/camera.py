@@ -25,6 +25,7 @@ from .api import CompanionApiError
 from .const import CONF_COMPANION_URL, DEFAULT_COMPANION_URL
 from .coordinator import CompanionCoordinator
 from .device_info import build_device_info
+from .entity_registry import reconcile_platform_entities
 
 _DEFAULT_RTSP_PORT = 8554
 _LOGGER = logging.getLogger(__name__)
@@ -41,6 +42,14 @@ async def async_setup_entry(
 
     def _sync_entrypoint_cameras() -> None:
         data = coordinator.data if isinstance(coordinator.data, dict) else {}
+        reconcile_platform_entities(
+            hass,
+            entry,
+            platform_domain="camera",
+            desired_unique_ids=_desired_camera_unique_ids(entry, data),
+            managed_unique_id_prefixes={f"{entry.entry_id}_entrypoint_camera_"},
+        )
+
         entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
         rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
         if not isinstance(rows, list):
@@ -77,6 +86,35 @@ async def async_setup_entry(
     entry.async_on_unload(coordinator.async_add_listener(_sync_entrypoint_cameras))
 
 
+def _desired_camera_unique_ids(entry: ConfigEntry, data: dict[str, Any]) -> set[str]:
+    desired: set[str] = set()
+    entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
+    rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
+    if not isinstance(rows, list):
+        return desired
+    for row in rows:
+        if not isinstance(row, dict) or row.get("has_stream") is False:
+            continue
+        entrypoint_id = str(row.get("id", "")).strip()
+        if entrypoint_id:
+            desired.add(f"{entry.entry_id}_entrypoint_camera_{entrypoint_id}")
+    return desired
+
+
+def _entrypoint_supports_stream(coordinator: CompanionCoordinator, entrypoint_id: str) -> bool:
+    data = coordinator.data if isinstance(coordinator.data, dict) else {}
+    entrypoints_container = data.get("entrypoints", {}) if isinstance(data, dict) else {}
+    rows = entrypoints_container.get("entrypoints", []) if isinstance(entrypoints_container, dict) else []
+    if not isinstance(rows, list):
+        return False
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("id", "")).strip() == entrypoint_id:
+            return row.get("has_stream") is not False
+    return False
+
+
 class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera):
     """Camera entity backed by a specific entrypoint stream."""
 
@@ -110,7 +148,10 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
 
     @property
     def available(self) -> bool:
-        return self.coordinator.entities_available
+        return self.coordinator.entities_available and _entrypoint_supports_stream(
+            self.coordinator,
+            self._entrypoint_id,
+        )
 
     @property
     def is_streaming(self) -> bool:

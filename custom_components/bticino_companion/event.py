@@ -36,6 +36,7 @@ class CompanionOpenWebNetTraceEvent(CoordinatorEntity[CompanionCoordinator], Eve
     _attr_name = "OpenWebNet Trace"
     _attr_icon = "mdi:timeline-text"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_should_poll = False
     _attr_event_types = _EVENT_TYPES
 
