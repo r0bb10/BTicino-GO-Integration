@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
@@ -10,6 +11,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
@@ -41,6 +43,7 @@ from .const import (
 )
 from .coordinator import CompanionCoordinator
 from .trace_relay import OpenWebNetTraceRelay
+from .websocket_api import async_register_websocket_commands
 
 
 @dataclass(slots=True)
@@ -60,6 +63,8 @@ SERVICE_SCHEMA_ENTRYPOINT = vol.Schema(
     }
 )
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+DATA_FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
+FRONTEND_PATH = "/bticino_companion_static"
 
 def _entry_value(entry: ConfigEntry, key: str, default: Any) -> Any:
     return entry.options.get(key, entry.data.get(key, default))
@@ -119,11 +124,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = runtime
     _delete_claim_recovery_issue(hass, entry.entry_id)
 
+    await _async_register_frontend(hass)
     await _async_register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Expose bundled Lovelace card assets and WebSocket commands."""
+    if hass.data.get(DATA_FRONTEND_REGISTERED):
+        return
+
+    www_path = Path(__file__).parent / "www"
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(FRONTEND_PATH, str(www_path), cache_headers=False)]
+    )
+    async_register_websocket_commands(hass)
+    hass.data[DATA_FRONTEND_REGISTERED] = True
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
