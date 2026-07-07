@@ -31,6 +31,12 @@ SENSORS: tuple[CompanionSensorDescription, ...] = (
         value_fn=lambda data, _: data.get("state", {}).get("call_state", "unknown"),
     ),
     CompanionSensorDescription(
+        key="stream_state",
+        name="Stream State",
+        icon="mdi:video-wireless",
+        value_fn=lambda data, _: data.get("state", {}).get("stream_state", "unknown"),
+    ),
+    CompanionSensorDescription(
         key="active_entrypoint",
         name="Active Entrypoint",
         icon="mdi:map-marker-path",

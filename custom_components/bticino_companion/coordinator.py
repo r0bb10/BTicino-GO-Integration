@@ -369,6 +369,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if event_type == "call.answered":
             state["call_state"] = "active"
+            state["talk_enabled"] = True
+            if state.get("stream_state") == "preview":
+                state["stream_state"] = "active"
+                state["stream_active"] = True
             return
 
         if event_type == "call.ended":
@@ -378,15 +382,36 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 state["call_state"] = "ringing"
             else:
                 state["call_state"] = "idle"
+                state["stream_state"] = "idle"
+                state["talk_enabled"] = False
+            return
+
+        if event_type == "preview.started":
+            state["stream_state"] = "preview"
+            state["stream_active"] = False
+            state["talk_enabled"] = False
+            if str(state.get("call_state", "")).strip().lower() in ("", "idle"):
+                state["call_state"] = "ringing"
+            return
+
+        if event_type == "preview.stopped":
+            if state.get("stream_state") == "preview":
+                state["stream_state"] = "idle"
+            state["talk_enabled"] = False
+            if not ring_active and not bool(state.get("stream_active")):
+                state["call_state"] = "idle"
             return
 
         if event_type == "stream.started":
             state["stream_active"] = True
+            state["stream_state"] = "active"
             state["call_state"] = "active"
             return
 
         if event_type == "stream.stopped":
             state["stream_active"] = False
+            state["stream_state"] = "idle"
+            state["talk_enabled"] = False
             state["call_state"] = "ringing" if ring_active else "idle"
             return
 
@@ -505,6 +530,15 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             normalized["call_state"] = str(normalized.get("call_state", "")).strip().lower()
         normalized["stream_active"] = bool(normalized.get("stream_active", False))
+        stream_state = normalized.get("stream_state")
+        if not isinstance(stream_state, str) or not stream_state.strip():
+            normalized["stream_state"] = "active" if normalized["stream_active"] else "idle"
+        else:
+            normalized_stream_state = stream_state.strip().lower()
+            if normalized_stream_state not in ("idle", "preview", "active"):
+                normalized_stream_state = "active" if normalized["stream_active"] else "idle"
+            normalized["stream_state"] = normalized_stream_state
+        normalized["talk_enabled"] = bool(normalized.get("talk_enabled", False))
         ring_active = bool(normalized.get(_RING_ACTIVE_KEY))
         if normalized["call_state"] == "ringing":
             ring_active = True

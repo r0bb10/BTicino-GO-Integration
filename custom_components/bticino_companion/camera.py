@@ -157,9 +157,11 @@ class CompanionEntrypointCamera(CoordinatorEntity[CompanionCoordinator], Camera)
     def is_streaming(self) -> bool:
         data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
         state = data.get("state", {}) if isinstance(data, dict) else {}
-        stream_active = bool((state if isinstance(state, dict) else {}).get("stream_active"))
-        active_entrypoint = str((state if isinstance(state, dict) else {}).get("active_entrypoint", "")).strip()
-        return stream_active and active_entrypoint == self._entrypoint_id
+        state = state if isinstance(state, dict) else {}
+        stream_active = bool(state.get("stream_active"))
+        stream_state = str(state.get("stream_state", "")).strip().lower()
+        active_entrypoint = str(state.get("active_entrypoint", "")).strip()
+        return (stream_active or stream_state in {"preview", "active"}) and active_entrypoint == self._entrypoint_id
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
