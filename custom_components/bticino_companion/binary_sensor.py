@@ -32,9 +32,24 @@ SENSORS: tuple[CompanionBinarySensorDescription, ...] = (
         icon="mdi:bell-ring",
         device_class=None,
         entity_category=None,
-        value_fn=lambda data, _coordinator: str(data.get("state", {}).get("call_state", "")).strip().lower() == "ringing",
+        value_fn=lambda data, _coordinator: _is_entrypoint_ringing(data),
     ),
 )
+
+
+def _ringing_entrypoint(data: dict[str, Any]) -> str:
+    state = data.get("state", {}) if isinstance(data, dict) else {}
+    value = state.get("active_entrypoint") if isinstance(state, dict) else None
+    if isinstance(value, str) and value.strip() and value.strip() != "none":
+        return value.strip()
+    return "none"
+
+
+def _is_entrypoint_ringing(data: dict[str, Any]) -> bool:
+    state = data.get("state", {}) if isinstance(data, dict) else {}
+    if not isinstance(state, dict):
+        return False
+    return str(state.get("call_state", "")).strip().lower() == "ringing" and _ringing_entrypoint(data) != "none"
 
 
 async def async_setup_entry(
@@ -83,3 +98,11 @@ class CompanionBinarySensorEntity(CoordinatorEntity[CompanionCoordinator], Binar
     def is_on(self) -> bool:
         data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
         return bool(self.entity_description.value_fn(data, self.coordinator))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.key != "ringing":
+            return None
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        entrypoint = _ringing_entrypoint(data)
+        return {"entrypoint": entrypoint, "active_entrypoint": entrypoint}

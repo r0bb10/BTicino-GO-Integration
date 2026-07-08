@@ -333,12 +333,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             state = dict(state)
 
         event_type = event.get("type")
-        if isinstance(event_type, str):
-            self._apply_state_transition(state, event_type, event.get("payload"))
-
         entrypoint_id = event.get("entrypoint_id")
         if isinstance(event_type, str):
             self._apply_active_entrypoint_transition(state, event_type, entrypoint_id)
+            self._apply_state_transition(state, event_type, event.get("payload"))
 
         existing["state"] = self._normalize_state_payload(state)
         existing["last_event"] = event
@@ -358,6 +356,8 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             state["audio"] = audio
 
         if event_type in ("ring.started", "call.incoming"):
+            if not CompanionCoordinator._event_has_valid_entrypoint(state):
+                return
             state[_RING_ACTIVE_KEY] = True
             state["call_state"] = "ringing"
             return
@@ -387,6 +387,8 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         if event_type == "preview.started":
+            if not CompanionCoordinator._event_has_valid_entrypoint(state):
+                return
             state["stream_state"] = "preview"
             state["stream_active"] = False
             state["talk_enabled"] = False
@@ -450,8 +452,8 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if isinstance(entrypoint_id, str):
             normalized = entrypoint_id.strip()
 
-        if event_type in ("ring.started", "call.incoming", "call.view_requested", "stream.started"):
-            if normalized and normalized != "floor":
+        if event_type in ("ring.started", "call.incoming", "call.view_requested", "preview.started", "stream.started"):
+            if normalized:
                 state["active_entrypoint"] = normalized
             return
 
@@ -542,6 +544,10 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ring_active = bool(normalized.get(_RING_ACTIVE_KEY))
         if normalized["call_state"] == "ringing":
             ring_active = True
+        if ring_active and not CompanionCoordinator._has_active_entrypoint(normalized):
+            ring_active = False
+            if normalized["call_state"] == "ringing":
+                normalized["call_state"] = "idle"
         normalized[_RING_ACTIVE_KEY] = ring_active
         normalized.pop("ringing", None)
         audio = normalized.get("audio")
@@ -564,7 +570,16 @@ class CompanionCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not isinstance(state, dict):
             return False
         call_state = str(state.get("call_state", "")).strip().lower()
-        return call_state == "ringing"
+        return call_state == "ringing" and CompanionCoordinator._has_active_entrypoint(state)
+
+    @staticmethod
+    def _has_active_entrypoint(state: dict[str, Any]) -> bool:
+        value = str(state.get("active_entrypoint", "")).strip()
+        return bool(value and value != "none")
+
+    @staticmethod
+    def _event_has_valid_entrypoint(state: dict[str, Any]) -> bool:
+        return CompanionCoordinator._has_active_entrypoint(state)
 
     @staticmethod
     def _normalize_system_control(payload: Any) -> dict[str, Any]:
