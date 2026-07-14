@@ -20,5 +20,14 @@
     "error": {
       "cannot_connect": "Cannot connect to the Companion."
     }
+  },
+  "entity": {
+    "event": {
+      "openwebnet_trace": {
+        "state_attributes": {
+          "frame": {"name": "Frame"}
+        }
+      }
+    }
   }
 }

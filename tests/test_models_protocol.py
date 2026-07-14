@@ -37,6 +37,44 @@ class ModelsTest(unittest.TestCase):
         self.assertFalse(entrypoint.capabilities.stream)
         self.assertEqual(trace.frame, "*7*300##")
 
+    def test_state_projects_platform_capabilities(self) -> None:
+        state = CompanionState.from_dict(
+            {
+                "entrypoints": [
+                    {
+                        "id": "main",
+                        "label": "Main Gate",
+                        "devaddr": "20",
+                        "capabilities": {"stream": True, "unlock": True, "ring": True},
+                    },
+                    {"id": "disabled", "capabilities": {"stream": False}},
+                ],
+                "audio": {"muted": True},
+                "voicemail": {"enabled": False},
+                "system_control": {
+                    "reboot_enabled": True,
+                    "services": {"dropbear": {"enabled": True, "exposed": True}},
+                    "update": {
+                        "enabled": True,
+                        "exposed": True,
+                        "current_version": "3.0.0",
+                        "available": {"version": "3.1.0"},
+                    },
+                },
+                "device": {"model": "C300X", "firmware": "1.2.3", "hardware": "rev-a"},
+            }
+        )
+
+        self.assertEqual([entrypoint.id for entrypoint in state.entrypoints], ["main", "disabled"])
+        self.assertTrue(state.entrypoints[0].capabilities.unlock)
+        self.assertTrue(state.muted)
+        self.assertFalse(state.voicemail_enabled)
+        self.assertTrue(state.reboot_enabled)
+        self.assertEqual(state.services[0].name, "dropbear")
+        self.assertEqual(state.update.installed_version, "3.0.0")
+        self.assertEqual(state.update.latest_version, "3.1.0")
+        self.assertEqual(state.model, "C300X")
+
 
 class ProtocolTest(unittest.TestCase):
     def test_command_and_ping_messages(self) -> None:

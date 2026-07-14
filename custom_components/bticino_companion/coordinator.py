@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 import logging
 from typing import Any
 
@@ -23,6 +23,7 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
         self.client = client
         self.last_event: Mapping[str, Any] | None = None
         self.last_trace: TraceFrame | None = None
+        self._trace_listeners: list[Callable[[TraceFrame], None]] = []
         self._runtime = RuntimeInfo()
         self.websocket = CompanionWebSocket(
             session=client.session,
@@ -53,6 +54,15 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
         """Send a Companion protocol command."""
         return await self.websocket.async_command(action, payload)
 
+    def async_add_trace_listener(self, listener: Callable[[TraceFrame], None]) -> Callable[[], None]:
+        """Register a listener for trace frames without creating another transport."""
+        self._trace_listeners.append(listener)
+
+        def _remove() -> None:
+            self._trace_listeners.remove(listener)
+
+        return _remove
+
     async def _async_update_data(self) -> CompanionState:
         if self.data is None:
             await self.websocket.async_wait_connected()
@@ -66,6 +76,8 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
 
     async def _async_handle_trace(self, trace: TraceFrame) -> None:
         self.last_trace = trace
+        for listener in tuple(self._trace_listeners):
+            listener(trace)
 
     async def _async_handle_connection(
         self, connected: bool, last_error: str | None, reconnect_attempts: int

@@ -5,6 +5,16 @@ from __future__ import annotations
 DOMAIN = "bticino_companion"
 NAME = "BTicino Companion"
 
+PLATFORMS: list[str] = [
+    "sensor",
+    "binary_sensor",
+    "button",
+    "switch",
+    "camera",
+    "event",
+    "update",
+]
+
 CONF_ACCESS_TOKEN = "access_token"
 CONF_CLAIM_CODE = "claim_code"
 CONF_COMPANION_URL = "companion_url"

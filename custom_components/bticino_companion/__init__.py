@@ -11,7 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import CompanionApiClient, CompanionAuthError
-from .const import CONF_ACCESS_TOKEN, CONF_COMPANION_URL, CONF_VERIFY_SSL, DOMAIN
+from .const import CONF_ACCESS_TOKEN, CONF_COMPANION_URL, CONF_VERIFY_SSL, DOMAIN, PLATFORMS
 from .coordinator import CompanionCoordinator
 from .websocket import CompanionWebSocketError
 
@@ -45,12 +45,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime = IntegrationRuntime(client=client, coordinator=coordinator)
     entry.runtime_data = runtime
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a Companion config entry."""
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
     runtime = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if isinstance(runtime, IntegrationRuntime):
         await runtime.coordinator.async_stop()
