@@ -38,7 +38,7 @@ class _CompanionSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity):
     def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator, key: str, name: str, icon: str) -> None:
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_unique_id = f"{entry.unique_id}_{key}"
         self._attr_name = name
         self._attr_icon = icon
 

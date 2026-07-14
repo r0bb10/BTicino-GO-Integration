@@ -17,7 +17,7 @@ def device_info(entry: ConfigEntry, state: CompanionState | None) -> DeviceInfo:
     if state and state.hardware:
         details["hw_version"] = state.hardware
     return DeviceInfo(
-        identifiers={(DOMAIN, entry.unique_id or entry.entry_id)},
+        identifiers={(DOMAIN, entry.unique_id)},
         name=NAME,
         manufacturer="BTicino",
         model=state.model if state and state.model else "Companion",

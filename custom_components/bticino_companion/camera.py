@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Any
 from urllib.parse import urlsplit
@@ -24,6 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Add one native stream camera for each stream-capable entrypoint."""
+    del hass
     runtime: IntegrationRuntime = entry.runtime_data
     known: set[str] = set()
 
@@ -33,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             return
         entities = []
         for entrypoint in state.entrypoints:
-            unique_id = f"{entry.entry_id}_camera_{entrypoint.id}"
+            unique_id = f"{entry.unique_id}_camera_{entrypoint.id}"
             if entrypoint.capabilities.stream and unique_id not in known:
                 known.add(unique_id)
                 entities.append(CompanionCamera(entry, runtime.coordinator, runtime.client, entrypoint))
@@ -57,7 +59,7 @@ class CompanionCamera(CoordinatorEntity[CompanionCoordinator], Camera):
         self._client = client
         self._entrypoint = entrypoint
         self._sessions: set[str] = set()
-        self._attr_unique_id = f"{entry.entry_id}_camera_{entrypoint.id}"
+        self._attr_unique_id = f"{entry.unique_id}_camera_{entrypoint.id}"
         self._attr_name = entrypoint.label or entrypoint.id
 
     @property
@@ -76,12 +78,37 @@ class CompanionCamera(CoordinatorEntity[CompanionCoordinator], Camera):
         return f"rtsp://{host}:8554/{self._entrypoint.id}"
 
     async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
-        """Fetch the server-maintained JPEG without initiating a call."""
+        """Request a server-maintained JPEG via the v3 protocol command."""
         del width, height
         try:
-            return await self._client.async_get_latest_snapshot(self._entrypoint.id)
-        except CompanionApiError as err:
-            _LOGGER.debug("Unable to get snapshot for %s: %s", self._entrypoint.id, err)
+            response = await self.coordinator.async_command(
+                "entrypoint.snapshot", {"entrypoint_id": self._entrypoint.id}
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Unable to request snapshot for %s: %s", self._entrypoint.id, err)
+            return None
+        if not isinstance(response, dict):
+            return None
+        data = response.get("data")
+        if isinstance(data, str):
+            try:
+                return base64.b64decode(data)
+            except ValueError:
+                _LOGGER.debug("Snapshot for %s returned invalid base64 data", self._entrypoint.id)
+                return None
+        url = response.get("url")
+        if isinstance(url, str):
+            return await self._async_fetch_image(url)
+        return None
+
+    async def _async_fetch_image(self, url: str) -> bytes | None:
+        try:
+            async with self._client.session.get(url, ssl=self._client.verify_ssl) as response:
+                if response.status >= 400:
+                    return None
+                return await response.read()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Unable to fetch snapshot for %s: %s", self._entrypoint.id, err)
             return None
 
     async def async_handle_async_webrtc_offer(self, offer_sdp: str, session_id: str, send_message: WebRTCSendMessage) -> None:

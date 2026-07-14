@@ -18,6 +18,7 @@ from .device_info import device_info
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Add the update entity only when the server explicitly exposes it."""
+    del hass
     runtime: IntegrationRuntime = entry.runtime_data
     added = False
 
@@ -44,7 +45,7 @@ class CompanionUpdate(CoordinatorEntity[CompanionCoordinator], UpdateEntity):
     def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator) -> None:
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_firmware_update"
+        self._attr_unique_id = f"{entry.unique_id}_firmware_update"
 
     @property
     def device_info(self):
@@ -71,4 +72,4 @@ class CompanionUpdate(CoordinatorEntity[CompanionCoordinator], UpdateEntity):
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
         """Request the configured v3 updater; version selection is server-owned."""
         del version, backup, kwargs
-        await self.coordinator.async_command("system.update.install")
+        await self.coordinator.async_command("update.install")
