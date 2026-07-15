@@ -26,6 +26,8 @@ DEFAULT_PORT = 8080
 
 API_PATH_PAIR_CHALLENGE = "/api/v3/pair/challenge"
 API_PATH_PAIR_CLAIM = "/api/v3/pair/claim"
+API_PATH_ISSUE_REPAIR_CODE = "/api/v3/admin/issue-repair-code"
+API_PATH_RESET_CLAIM = "/api/v3/admin/reset-claim"
 API_PATH_WEBRTC_OFFER = "/api/v3/webrtc/offer"
 API_PATH_WEBRTC_CANDIDATE = "/api/v3/webrtc/candidate"
 API_PATH_WEBRTC_CLOSE = "/api/v3/webrtc/close"
@@ -37,3 +39,5 @@ WEBSOCKET_PING_INTERVAL_SECONDS = 25
 WEBSOCKET_RECONNECT_MIN_SECONDS = 1
 WEBSOCKET_RECONNECT_MAX_SECONDS = 30
 WEBSOCKET_CONNECT_TIMEOUT_SECONDS = 10
+
+ISSUE_CLAIM_RECOVERY = "claim_recovery"

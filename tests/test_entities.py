@@ -20,6 +20,7 @@ try:
     )
     from bticino_companion.camera import CompanionCamera, async_setup_entry as camera_async_setup_entry
     from bticino_companion.coordinator import CompanionCoordinator
+    from bticino_companion.api import CompanionApiClient
     from bticino_companion.models import CompanionState, Diagnostics, Entrypoint, UpdateInfo
     from bticino_companion.sensor import async_setup_entry as sensor_async_setup_entry
     from bticino_companion.switch import CompanionMuteSwitch, CompanionVoicemailSwitch
@@ -209,6 +210,21 @@ class UpdateCommandPayloadTest(unittest.IsolatedAsyncioTestCase):
         entity = CompanionUpdate(entry, coordinator)
         await entity.async_install(version=None, backup=False)
         coordinator.async_command.assert_awaited_once_with("update.install")
+
+
+class RepairApiTest(unittest.IsolatedAsyncioTestCase):
+    async def test_repair_requests_use_authenticated_v3_endpoints(self) -> None:
+        client = CompanionApiClient(MagicMock(), "http://companion.local:8080", "token")
+        client._async_request = AsyncMock(return_value={"repair_code": "a1b2-c3d4"})
+
+        await client.async_issue_repair_code()
+        client._async_request.assert_awaited_once_with("POST", "/api/v3/admin/issue-repair-code", auth=True)
+
+        client._async_request.reset_mock()
+        await client.async_reset_claim("a1b2-c3d4")
+        client._async_request.assert_awaited_once_with(
+            "POST", "/api/v3/admin/reset-claim", auth=True, json_body={"repair_code": "a1b2-c3d4"}
+        )
 
 
 class CameraCommandPayloadTest(unittest.IsolatedAsyncioTestCase):

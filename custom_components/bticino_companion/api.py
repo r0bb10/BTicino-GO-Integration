@@ -9,6 +9,8 @@ from aiohttp import ClientError, ClientResponse, ClientSession
 from .const import (
     API_PATH_PAIR_CHALLENGE,
     API_PATH_PAIR_CLAIM,
+    API_PATH_ISSUE_REPAIR_CODE,
+    API_PATH_RESET_CLAIM,
     API_PATH_SNAPSHOT_CAPTURE,
     API_PATH_SNAPSHOT_LATEST,
     API_PATH_WEBRTC_CANDIDATE,
@@ -19,6 +21,10 @@ from .const import (
 
 class CompanionApiError(Exception):
     """Raised when a Companion REST request fails."""
+
+    def __init__(self, message: str, code: str = "cannot_connect") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class CompanionAuthError(CompanionApiError):
@@ -84,6 +90,14 @@ class CompanionApiClient:
             raise CompanionApiError("pair claim response did not contain an access token")
         self._access_token = access_token
         return payload
+
+    async def async_issue_repair_code(self) -> dict[str, Any]:
+        return await self._async_request("POST", API_PATH_ISSUE_REPAIR_CODE, auth=True)
+
+    async def async_reset_claim(self, repair_code: str) -> dict[str, Any]:
+        return await self._async_request(
+            "POST", API_PATH_RESET_CLAIM, auth=True, json_body={"repair_code": repair_code}
+        )
 
     async def async_webrtc_offer(
         self, *, entrypoint_id: str, offer_sdp: str, session_id: str
@@ -186,8 +200,10 @@ class CompanionApiClient:
         if response.status < 400:
             return
         message = f"Companion request failed ({response.status})"
+        code = "cannot_connect"
         if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
             message = str(payload["error"].get("message", message))
+            code = str(payload["error"].get("code", code))
         if response.status in (401, 403):
-            raise CompanionAuthError(message)
-        raise CompanionApiError(message)
+            raise CompanionAuthError(message, code)
+        raise CompanionApiError(message, code)

@@ -73,6 +73,7 @@ class CompanionWebSocket:
         self._pending: dict[str, asyncio.Future[Mapping[str, Any]]] = {}
         self._reconnect_attempts = 0
         self._last_error: str | None = None
+        self._auth_failed = False
 
     @property
     def connected(self) -> bool:
@@ -124,6 +125,8 @@ class CompanionWebSocket:
         try:
             await asyncio.wait_for(self._initial_state.wait(), timeout)
         except TimeoutError as err:
+            if self._auth_failed:
+                raise CompanionAuthError("Companion authentication failed") from err
             raise CompanionWebSocketError("timed out connecting to Companion WebSocket") from err
 
     async def async_command(
@@ -154,6 +157,7 @@ class CompanionWebSocket:
                 raise
             except CompanionAuthError as err:
                 self._last_error = str(err)
+                self._auth_failed = True
                 self._reconnect_attempts += 1
                 await self._async_notify_connection(False)
                 await self._async_wait_or_stop(WEBSOCKET_RECONNECT_MAX_SECONDS)
@@ -187,6 +191,7 @@ class CompanionWebSocket:
             raise CompanionWebSocketError("unable to connect to Companion WebSocket") from err
 
         self._websocket = websocket
+        self._auth_failed = False
         self._reconnect_attempts = 0
         self._last_error = None
         self._connected.set()
