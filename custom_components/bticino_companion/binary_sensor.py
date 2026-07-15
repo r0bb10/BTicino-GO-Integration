@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import IntegrationRuntime
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -20,7 +21,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async_add_entities([CompanionRingingBinarySensor(entry, runtime.coordinator)])
 
 
-class CompanionRingingBinarySensor(CoordinatorEntity[CompanionCoordinator], BinarySensorEntity):
+class CompanionRingingBinarySensor(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], BinarySensorEntity):
     """Report whether a configured entrypoint is ringing."""
 
     _attr_has_entity_name = True

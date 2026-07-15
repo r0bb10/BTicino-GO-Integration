@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import IntegrationRuntime
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
 from .models import TraceFrame
 
 
@@ -22,7 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async_add_entities([CompanionTraceEvent(entry, runtime.coordinator)])
 
 
-class CompanionTraceEvent(CoordinatorEntity[CompanionCoordinator], EventEntity):
+class CompanionTraceEvent(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], EventEntity):
     """Publish frames already multiplexed through the coordinator WebSocket."""
 
     _attr_has_entity_name = True

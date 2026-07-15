@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import IntegrationRuntime
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -32,7 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entry.async_on_unload(runtime.coordinator.async_add_listener(_add_voicemail))
 
 
-class _CompanionSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity):
+class _CompanionSwitch(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], SwitchEntity):
     _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator, key: str, name: str, icon: str) -> None:
@@ -45,10 +46,6 @@ class _CompanionSwitch(CoordinatorEntity[CompanionCoordinator], SwitchEntity):
     @property
     def device_info(self):
         return device_info(self._entry, self.coordinator.data)
-
-    @property
-    def available(self) -> bool:
-        return self.coordinator.runtime.connected
 
 
 class CompanionMuteSwitch(_CompanionSwitch):

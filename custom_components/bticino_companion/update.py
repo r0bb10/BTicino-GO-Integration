@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import IntegrationRuntime
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -33,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entry.async_on_unload(runtime.coordinator.async_add_listener(_add_update))
 
 
-class CompanionUpdate(CoordinatorEntity[CompanionCoordinator], UpdateEntity):
+class CompanionUpdate(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], UpdateEntity):
     """Install the release selected by the Companion v3 updater."""
 
     _attr_has_entity_name = True
@@ -54,7 +55,7 @@ class CompanionUpdate(CoordinatorEntity[CompanionCoordinator], UpdateEntity):
     @property
     def available(self) -> bool:
         state = self.coordinator.data
-        return bool(self.coordinator.runtime.connected and state and state.update.enabled and state.update.exposed)
+        return bool(super().available and state and state.update.enabled and state.update.exposed)
 
     @property
     def installed_version(self) -> str | None:

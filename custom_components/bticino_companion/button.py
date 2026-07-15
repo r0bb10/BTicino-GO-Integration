@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import IntegrationRuntime
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
 from .models import CompanionState, Entrypoint
 
 
@@ -175,7 +176,7 @@ def _incoming_dialog(state: CompanionState) -> str | None:
     return state.incoming_dialog_id if state.call_state in {"incoming", "ringing"} else None
 
 
-class _CompanionButton(CoordinatorEntity[CompanionCoordinator], ButtonEntity):
+class _CompanionButton(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], ButtonEntity):
     """Base for fixed v3 command buttons."""
 
     _attr_has_entity_name = True
@@ -198,10 +199,6 @@ class _CompanionButton(CoordinatorEntity[CompanionCoordinator], ButtonEntity):
     @property
     def device_info(self):
         return device_info(self._entry, self.coordinator.data)
-
-    @property
-    def available(self) -> bool:
-        return self.coordinator.runtime.connected
 
 
 class CompanionCommandButton(_CompanionButton):

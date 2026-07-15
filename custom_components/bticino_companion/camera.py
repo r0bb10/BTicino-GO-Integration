@@ -18,6 +18,7 @@ from . import IntegrationRuntime
 from .api import CompanionApiError
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
 from .models import Entrypoint
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entry.async_on_unload(runtime.coordinator.async_add_listener(_add_cameras))
 
 
-class CompanionCamera(CoordinatorEntity[CompanionCoordinator], Camera):
+class CompanionCamera(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], Camera):
     """A per-entrypoint camera preserving HA's native WebRTC contract."""
 
     _attr_has_entity_name = True
@@ -65,10 +66,6 @@ class CompanionCamera(CoordinatorEntity[CompanionCoordinator], Camera):
     @property
     def device_info(self):
         return device_info(self._entry, self.coordinator.data)
-
-    @property
-    def available(self) -> bool:
-        return self.coordinator.runtime.connected
 
     async def stream_source(self) -> str | None:
         host = urlsplit(self._client.base_url).hostname

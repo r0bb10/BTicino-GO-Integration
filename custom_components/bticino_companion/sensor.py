@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
 from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
 from .coordinator import CompanionCoordinator
 
 
@@ -23,7 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     ])
 
 
-class CompanionStateSensor(CoordinatorEntity[CompanionCoordinator], SensorEntity):
+class CompanionStateSensor(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], SensorEntity):
     """Expose one scalar from the pushed Companion state."""
 
     _attr_has_entity_name = True
@@ -39,10 +40,6 @@ class CompanionStateSensor(CoordinatorEntity[CompanionCoordinator], SensorEntity
     @property
     def device_info(self):
         return device_info(self._entry, self.coordinator.data)
-
-    @property
-    def available(self) -> bool:
-        return self.coordinator.data is not None and self.coordinator.runtime.connected
 
     @property
     def native_value(self) -> str:
