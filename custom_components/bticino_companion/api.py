@@ -69,16 +69,13 @@ class CompanionApiClient:
     async def async_pair_challenge(self) -> dict[str, Any]:
         return await self._async_request("POST", API_PATH_PAIR_CHALLENGE, auth=False)
 
-    async def async_pair_claim(
-        self, *, challenge_id: str, nonce: str, claim_code: str
-    ) -> dict[str, Any]:
+    async def async_pair_claim(self, *, challenge_id: str, claim_code: str) -> dict[str, Any]:
         payload = await self._async_request(
             "POST",
             API_PATH_PAIR_CLAIM,
             auth=False,
             json_body={
                 "challenge_id": challenge_id,
-                "nonce": nonce,
                 "claim_code": claim_code,
             },
         )

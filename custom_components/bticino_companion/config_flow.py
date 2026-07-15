@@ -95,7 +95,6 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
             challenge = await client.async_pair_challenge()
             await client.async_pair_claim(
                 challenge_id=str(challenge.get("challenge_id", "")),
-                nonce=str(challenge.get("nonce", "")),
                 claim_code=claim_code,
             )
         return {
