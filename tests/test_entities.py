@@ -20,7 +20,8 @@ try:
     )
     from bticino_companion.camera import CompanionCamera, async_setup_entry as camera_async_setup_entry
     from bticino_companion.coordinator import CompanionCoordinator
-    from bticino_companion.models import CompanionState, Entrypoint, UpdateInfo
+    from bticino_companion.models import CompanionState, Diagnostics, Entrypoint, UpdateInfo
+    from bticino_companion.sensor import async_setup_entry as sensor_async_setup_entry
     from bticino_companion.switch import CompanionMuteSwitch, CompanionVoicemailSwitch
     from bticino_companion.update import CompanionUpdate
 except ImportError as err:
@@ -34,6 +35,7 @@ class _MockEntry:
     """Minimal ConfigEntry stand-in."""
 
     def __init__(self) -> None:
+        self.entry_id = "entry-123"
         self.unique_id = "device-123"
         self.runtime_data = MagicMock()
         self.runtime_data.coordinator = MagicMock(spec=CompanionCoordinator)
@@ -72,6 +74,7 @@ def _state(**kwargs) -> CompanionState:
         "model": None,
         "firmware": None,
         "hardware": None,
+        "diagnostics": Diagnostics(),
     }
     defaults.update(kwargs)
     return CompanionState(**defaults)
@@ -342,6 +345,17 @@ class SetupEntryTest(unittest.IsolatedAsyncioTestCase):
         await camera_async_setup_entry(MagicMock(), entry, add_entities)
         self.assertEqual(len(added), 1)
         self.assertEqual(added[0].unique_id, "device-123_camera_cam1")
+
+    async def test_sensor_setup_restores_three_diagnostic_sensors(self) -> None:
+        entry = _MockEntry()
+        entry.runtime_data.coordinator = _make_coordinator(_state())
+        added: list = []
+
+        await sensor_async_setup_entry(MagicMock(), entry, added.extend)
+
+        diagnostic_ids = {entity.unique_id for entity in added if "call_state" not in entity.unique_id and "active_entrypoint" not in entity.unique_id}
+        self.assertEqual(diagnostic_ids, {"entry-123_ip_address", "entry-123_mac_address", "entry-123_wifi_strength"})
+        self.assertTrue(all(entity.entity_category is not None for entity in added if entity.unique_id in diagnostic_ids))
 
 
 if __name__ == "__main__":

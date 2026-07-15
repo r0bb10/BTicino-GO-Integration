@@ -12,10 +12,10 @@ from .models import CompanionState
 def device_info(entry: ConfigEntry, state: CompanionState | None) -> DeviceInfo:
     """Build stable device metadata from the config entry and pushed state."""
     details: dict[str, str] = {}
-    if state and state.firmware:
-        details["sw_version"] = state.firmware
-    if state and state.hardware:
-        details["hw_version"] = state.hardware
+    if state and state.diagnostics.firmware:
+        details["sw_version"] = state.diagnostics.firmware
+    if state and state.diagnostics.hardware:
+        details["hw_version"] = state.diagnostics.hardware
     return DeviceInfo(
         identifiers={(DOMAIN, entry.unique_id)},
         name=NAME,

@@ -78,6 +78,40 @@ class RuntimeInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class Diagnostics:
+    """Cached device diagnostics pushed by Companion."""
+
+    ip_address: str | None = None
+    netmask: str | None = None
+    mac_address: str | None = None
+    firmware: str | None = None
+    hardware: str | None = None
+    kernel: str | None = None
+    distribution: str | None = None
+    wifi_strength: int | None = None
+    refreshed_at: str | None = None
+    refresh_error: str | None = None
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "Diagnostics":
+        openwebnet = mapping_at(payload, "openwebnet")
+        local = mapping_at(payload, "local")
+        wifi = local.get("wifi_strength")
+        return cls(
+            ip_address=_optional_string(openwebnet.get("ip")),
+            netmask=_optional_string(openwebnet.get("netmask")),
+            mac_address=_optional_string(openwebnet.get("mac")),
+            firmware=_optional_string(openwebnet.get("firmware")),
+            hardware=_optional_string(openwebnet.get("hardware")),
+            kernel=_optional_string(openwebnet.get("kernel")),
+            distribution=_optional_string(openwebnet.get("distribution")),
+            wifi_strength=wifi if isinstance(wifi, int) else None,
+            refreshed_at=_optional_string(payload.get("refreshed_at")),
+            refresh_error=_optional_string(payload.get("refresh_error")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class TraceFrame:
     """An OpenWebNet frame multiplexed over the Companion WebSocket."""
 
@@ -111,6 +145,7 @@ class CompanionState:
     model: str | None = None
     firmware: str | None = None
     hardware: str | None = None
+    diagnostics: Diagnostics = Diagnostics()
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "CompanionState":
@@ -132,6 +167,7 @@ class CompanionState:
         system = mapping_at(payload, "system")
         system_control = mapping_at(payload, "system_control")
         device = mapping_at(payload, "device")
+        diagnostics = Diagnostics.from_dict(mapping_at(payload, "diagnostics"))
         update_payload = mapping_at(system_control, "update") or mapping_at(system, "update")
         services_payload = mapping_at(system_control, "services") or mapping_at(system, "services")
         entrypoints = _entrypoints(payload)
@@ -155,8 +191,9 @@ class CompanionState:
                 in_progress=bool(update_payload.get("in_progress", False)),
             ),
             model=_optional_string(device.get("model", payload.get("model"))),
-            firmware=_optional_string(device.get("firmware", payload.get("firmware"))),
-            hardware=_optional_string(device.get("hardware", payload.get("hardware"))),
+            firmware=diagnostics.firmware or _optional_string(device.get("firmware", payload.get("firmware"))),
+            hardware=diagnostics.hardware or _optional_string(device.get("hardware", payload.get("hardware"))),
+            diagnostics=diagnostics,
         )
 
 

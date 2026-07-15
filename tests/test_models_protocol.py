@@ -75,6 +75,28 @@ class ModelsTest(unittest.TestCase):
         self.assertEqual(state.update.latest_version, "3.1.0")
         self.assertEqual(state.model, "C300X")
 
+    def test_state_uses_pushed_diagnostics_metadata(self) -> None:
+        state = CompanionState.from_dict(
+            {
+                "device": {"firmware": "stale", "hardware": "stale"},
+                "diagnostics": {
+                    "openwebnet": {
+                        "ip": "192.0.2.10",
+                        "mac": "00:11:22:33:44:55",
+                        "firmware": "2.3.4",
+                        "hardware": "rev-b",
+                    },
+                    "local": {"wifi_strength": 72},
+                },
+            }
+        )
+
+        self.assertEqual(state.diagnostics.ip_address, "192.0.2.10")
+        self.assertEqual(state.diagnostics.mac_address, "00:11:22:33:44:55")
+        self.assertEqual(state.diagnostics.wifi_strength, 72)
+        self.assertEqual(state.firmware, "2.3.4")
+        self.assertEqual(state.hardware, "rev-b")
+
 
 class ProtocolTest(unittest.TestCase):
     def test_command_and_ping_messages(self) -> None:

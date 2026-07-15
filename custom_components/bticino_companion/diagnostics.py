@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -17,10 +18,10 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     del hass
     runtime: IntegrationRuntime = entry.runtime_data
     state = runtime.coordinator.data
-    return {
+    return async_redact_data({
         "entry": async_redact_data(dict(entry.data), {CONF_ACCESS_TOKEN}),
-        "state": state,
-        "transport": runtime.coordinator.runtime,
+        "state": asdict(state) if state is not None else None,
+        "transport": asdict(runtime.coordinator.runtime),
         "last_event": runtime.coordinator.last_event,
-        "last_trace": runtime.coordinator.last_trace,
-    }
+        "last_trace": asdict(runtime.coordinator.last_trace) if runtime.coordinator.last_trace else None,
+    }, {CONF_ACCESS_TOKEN, "ip", "ip_address", "mac", "mac_address"})
