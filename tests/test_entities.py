@@ -11,7 +11,8 @@ COMPONENT_PATH = Path(__file__).parents[1] / "custom_components"
 sys.path.insert(0, str(COMPONENT_PATH))
 
 try:
-    from bticino_companion.button import CompanionEntrypointButton, async_setup_entry as button_async_setup_entry
+    from bticino_companion.button import CompanionEntrypointButton, CompanionRebootButton, async_setup_entry as button_async_setup_entry
+    from bticino_companion.api import CompanionApiClient
     from bticino_companion.coordinator import CompanionCoordinator
     from bticino_companion.models import CompanionState, Diagnostics, Entrypoint, UpdateInfo
     from bticino_companion.switch import CompanionMuteSwitch, CompanionVoicemailSwitch
@@ -33,6 +34,7 @@ class _MockEntry:
         self.runtime_data.client.async_set_muted = AsyncMock()
         self.runtime_data.client.async_set_voicemail_enabled = AsyncMock()
         self.runtime_data.client.async_install_update = AsyncMock()
+        self.runtime_data.client.async_reboot = AsyncMock()
 
     def async_on_unload(self, listener):
         return lambda: None
@@ -93,11 +95,28 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         await update.async_install(version=None, backup=False)
         entry.runtime_data.client.async_install_update.assert_awaited_once()
 
+    async def test_reboot_uses_typed_rest_client(self) -> None:
+        entry = _MockEntry()
+        reboot = CompanionRebootButton(entry, _coordinator(), entry.runtime_data.client)
+
+        await reboot.async_press()
+
+        entry.runtime_data.client.async_reboot.assert_awaited_once()
+
+    async def test_reboot_client_uses_reboot_rest_endpoint(self) -> None:
+        client = CompanionApiClient(MagicMock(), "http://companion", "token")
+        client._async_request = AsyncMock()
+
+        await client.async_reboot()
+
+        client._async_request.assert_awaited_once_with("POST", "/api/v3/system/reboot", auth=True)
+
 
 class SetupTest(unittest.IsolatedAsyncioTestCase):
-    async def test_button_setup_exposes_only_unlock(self) -> None:
+    async def test_button_setup_exposes_one_config_reboot_button_when_enabled(self) -> None:
         entry = _MockEntry()
         state = _state(
+            reboot_enabled=True,
             entrypoints=(
                 Entrypoint.from_dict(
                     {"id": "main", "label": "Main", "capabilities": {"unlock": True, "stream": True}, "availability": {"unlock": True}}
@@ -109,4 +128,5 @@ class SetupTest(unittest.IsolatedAsyncioTestCase):
 
         await button_async_setup_entry(MagicMock(), entry, added.extend)
 
-        self.assertEqual([entity.unique_id for entity in added], ["device-123_unlock_main"])
+        self.assertEqual([entity.unique_id for entity in added], ["device-123_unlock_main", "device-123_reboot"])
+        self.assertEqual(added[1].entity_category, "config")

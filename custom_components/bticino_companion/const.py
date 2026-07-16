@@ -32,6 +32,7 @@ API_PATH_AUDIO_UNMUTE = "/api/v3/audio/unmute"
 API_PATH_VOICEMAIL_ENABLE = "/api/v3/voicemail/enable"
 API_PATH_VOICEMAIL_DISABLE = "/api/v3/voicemail/disable"
 API_PATH_UPDATE_INSTALL = "/api/v3/system/update/install"
+API_PATH_SYSTEM_REBOOT = "/api/v3/system/reboot"
 WEBSOCKET_PATH = "/api/v3/ws"
 
 WEBSOCKET_PING_INTERVAL_SECONDS = 25

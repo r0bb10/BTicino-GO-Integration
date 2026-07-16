@@ -15,6 +15,7 @@ from .const import (
     API_PATH_AUDIO_MUTE,
     API_PATH_AUDIO_UNMUTE,
     API_PATH_ENTRYPOINT_UNLOCK,
+    API_PATH_SYSTEM_REBOOT,
     API_PATH_UPDATE_INSTALL,
     API_PATH_VOICEMAIL_DISABLE,
     API_PATH_VOICEMAIL_ENABLE,
@@ -116,6 +117,9 @@ class CompanionApiClient:
 
     async def async_install_update(self) -> dict[str, Any]:
         return await self._async_request("POST", API_PATH_UPDATE_INSTALL, auth=True)
+
+    async def async_reboot(self) -> dict[str, Any]:
+        return await self._async_request("POST", API_PATH_SYSTEM_REBOOT, auth=True)
 
     async def _async_request(
         self,

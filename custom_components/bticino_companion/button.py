@@ -28,6 +28,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             return
         entities: list[ButtonEntity] = []
         entities.extend(_entrypoint_buttons(entry, runtime.coordinator, runtime.client, state, known))
+        if state.reboot_enabled:
+            unique_id = f"{entry.unique_id}_reboot"
+            if unique_id not in known:
+                known.add(unique_id)
+                entities.append(CompanionRebootButton(entry, runtime.coordinator, runtime.client))
         if entities:
             async_add_entities(entities)
 
@@ -109,3 +114,14 @@ class CompanionEntrypointButton(_CompanionButton):
 
     async def async_press(self) -> None:
         await self._client.async_unlock_entrypoint(self._entrypoint.id)
+
+
+class CompanionRebootButton(_CompanionButton):
+    """Reboot the intercom through the typed REST control endpoint."""
+
+    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator, client) -> None:
+        super().__init__(entry, coordinator, "reboot", "Reboot", "mdi:restart")
+        self._client = client
+
+    async def async_press(self) -> None:
+        await self._client.async_reboot()
