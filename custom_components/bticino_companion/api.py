@@ -1,8 +1,9 @@
-"""REST client for Companion pairing, WebRTC, and snapshots."""
+"""REST client for Companion pairing and typed control endpoints."""
 
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import ClientError, ClientResponse, ClientSession
 
@@ -11,11 +12,12 @@ from .const import (
     API_PATH_PAIR_CLAIM,
     API_PATH_ISSUE_REPAIR_CODE,
     API_PATH_RESET_CLAIM,
-    API_PATH_SNAPSHOT_CAPTURE,
-    API_PATH_SNAPSHOT_LATEST,
-    API_PATH_WEBRTC_CANDIDATE,
-    API_PATH_WEBRTC_CLOSE,
-    API_PATH_WEBRTC_OFFER,
+    API_PATH_AUDIO_MUTE,
+    API_PATH_AUDIO_UNMUTE,
+    API_PATH_ENTRYPOINT_UNLOCK,
+    API_PATH_UPDATE_INSTALL,
+    API_PATH_VOICEMAIL_DISABLE,
+    API_PATH_VOICEMAIL_ENABLE,
 )
 
 
@@ -99,44 +101,21 @@ class CompanionApiClient:
             "POST", API_PATH_RESET_CLAIM, auth=True, json_body={"repair_code": repair_code}
         )
 
-    async def async_webrtc_offer(
-        self, *, entrypoint_id: str, offer_sdp: str, session_id: str
-    ) -> dict[str, Any]:
+    async def async_unlock_entrypoint(self, entrypoint_id: str) -> dict[str, Any]:
         return await self._async_request(
-            "POST",
-            API_PATH_WEBRTC_OFFER,
-            auth=True,
-            json_body={
-                "entrypoint_id": entrypoint_id,
-                "offer_sdp": offer_sdp,
-                "session_id": session_id,
-            },
+            "POST", API_PATH_ENTRYPOINT_UNLOCK.format(entrypoint_id=quote(entrypoint_id, safe="")), auth=True
         )
 
-    async def async_webrtc_candidate(
-        self, *, session_id: str, candidate: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def async_set_muted(self, muted: bool) -> dict[str, Any]:
+        return await self._async_request("POST", API_PATH_AUDIO_MUTE if muted else API_PATH_AUDIO_UNMUTE, auth=True)
+
+    async def async_set_voicemail_enabled(self, enabled: bool) -> dict[str, Any]:
         return await self._async_request(
-            "POST",
-            API_PATH_WEBRTC_CANDIDATE,
-            auth=True,
-            json_body={"session_id": session_id, "candidate": candidate},
+            "POST", API_PATH_VOICEMAIL_ENABLE if enabled else API_PATH_VOICEMAIL_DISABLE, auth=True
         )
 
-    async def async_webrtc_close(self, *, session_id: str) -> dict[str, Any]:
-        return await self._async_request(
-            "POST", API_PATH_WEBRTC_CLOSE, auth=True, json_body={"session_id": session_id}
-        )
-
-    async def async_capture_snapshot(self, entrypoint_id: str) -> bytes:
-        return await self._async_request_bytes(
-            "POST", API_PATH_SNAPSHOT_CAPTURE.format(entrypoint_id=entrypoint_id)
-        )
-
-    async def async_get_latest_snapshot(self, entrypoint_id: str) -> bytes:
-        return await self._async_request_bytes(
-            "GET", API_PATH_SNAPSHOT_LATEST.format(entrypoint_id=entrypoint_id)
-        )
+    async def async_install_update(self) -> dict[str, Any]:
+        return await self._async_request("POST", API_PATH_UPDATE_INSTALL, auth=True)
 
     async def _async_request(
         self,
@@ -152,16 +131,6 @@ class CompanionApiClient:
             self._raise_for_status(response, payload)
             if not isinstance(payload, dict):
                 raise CompanionApiError("Companion returned a non-object response")
-            return payload
-
-    async def _async_request_bytes(self, method: str, path: str) -> bytes:
-        response = await self._async_open_request(method, path, auth=True)
-        async with response:
-            if response.status >= 400:
-                self._raise_for_status(response, await self._async_json(response))
-            payload = await response.read()
-            if not payload:
-                raise CompanionApiError("Companion returned an empty snapshot")
             return payload
 
     async def _async_open_request(

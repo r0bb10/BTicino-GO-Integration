@@ -30,6 +30,23 @@ class Capability:
 
 
 @dataclass(frozen=True, slots=True)
+class Availability:
+    """Live availability for an entrypoint capability."""
+
+    unlock: bool = False
+    stream: bool = False
+    snapshot: bool = False
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "Availability":
+        return cls(
+            unlock=bool(payload.get("unlock", False)),
+            stream=bool(payload.get("stream", False)),
+            snapshot=bool(payload.get("snapshot", False)),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class Entrypoint:
     """A configured intercom entrypoint."""
 
@@ -37,6 +54,7 @@ class Entrypoint:
     label: str
     devaddr: str
     capabilities: Capability
+    availability: Availability
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "Entrypoint":
@@ -45,6 +63,7 @@ class Entrypoint:
             label=str(payload.get("label", "")).strip(),
             devaddr=str(payload.get("devaddr", "")).strip(),
             capabilities=Capability.from_dict(mapping_at(payload, "capabilities")),
+            availability=Availability.from_dict(mapping_at(payload, "availability")),
         )
 
 

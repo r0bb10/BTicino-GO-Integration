@@ -21,14 +21,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Set up audio mute and dynamically supported voicemail controls."""
     del hass
     runtime: IntegrationRuntime = entry.runtime_data
-    async_add_entities([CompanionMuteSwitch(entry, runtime.coordinator)])
+    async_add_entities([CompanionMuteSwitch(entry, runtime.coordinator, runtime.client)])
     added_voicemail = False
 
     def _add_voicemail() -> None:
         nonlocal added_voicemail
         if not added_voicemail and runtime.coordinator.data and runtime.coordinator.data.voicemail_enabled is not None:
             added_voicemail = True
-            async_add_entities([CompanionVoicemailSwitch(entry, runtime.coordinator)])
+            async_add_entities([CompanionVoicemailSwitch(entry, runtime.coordinator, runtime.client)])
 
     _add_voicemail()
     entry.async_on_unload(runtime.coordinator.async_add_listener(_add_voicemail))
@@ -51,8 +51,9 @@ class _CompanionSwitch(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCo
 
 
 class CompanionMuteSwitch(_CompanionSwitch):
-    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator) -> None:
+    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator, client) -> None:
         super().__init__(entry, coordinator, "mute", "Mute", "mdi:microphone-off")
+        self._client = client
 
     @property
     def is_on(self) -> bool:
@@ -60,16 +61,17 @@ class CompanionMuteSwitch(_CompanionSwitch):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         del kwargs
-        await self.coordinator.async_command("audio.mute")
+        await self._client.async_set_muted(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         del kwargs
-        await self.coordinator.async_command("audio.unmute")
+        await self._client.async_set_muted(False)
 
 
 class CompanionVoicemailSwitch(_CompanionSwitch):
-    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator) -> None:
+    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator, client) -> None:
         super().__init__(entry, coordinator, "voicemail", "Voicemail", "mdi:voicemail")
+        self._client = client
 
     @property
     def is_on(self) -> bool:
@@ -77,8 +79,8 @@ class CompanionVoicemailSwitch(_CompanionSwitch):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         del kwargs
-        await self.coordinator.async_command("voicemail.enable")
+        await self._client.async_set_voicemail_enabled(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         del kwargs
-        await self.coordinator.async_command("voicemail.disable")
+        await self._client.async_set_voicemail_enabled(False)

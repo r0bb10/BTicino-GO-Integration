@@ -11,16 +11,6 @@ class ProtocolError(ValueError):
     """Raised when a wire message is malformed."""
 
 
-def command_message(command_id: str, action: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """Create a protocol command message."""
-    return {
-        "type": "command",
-        "id": command_id,
-        "action": action,
-        "payload": dict(payload or {}),
-    }
-
-
 def ping_message(ping_id: str) -> dict[str, str]:
     """Create a protocol ping message."""
     return {"type": "ping", "id": ping_id}

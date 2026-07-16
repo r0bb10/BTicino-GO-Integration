@@ -10,7 +10,7 @@ COMPONENT_PATH = Path(__file__).parents[1] / "custom_components" / "bticino_comp
 sys.path.insert(0, str(COMPONENT_PATH))
 
 from models import CompanionState, Entrypoint, TraceFrame
-from protocol import ProtocolError, command_message, parse_message, ping_message
+from protocol import ProtocolError, parse_message, ping_message
 
 
 class ModelsTest(unittest.TestCase):
@@ -35,6 +35,7 @@ class ModelsTest(unittest.TestCase):
         self.assertEqual(entrypoint.label, "")
         self.assertTrue(entrypoint.capabilities.unlock)
         self.assertFalse(entrypoint.capabilities.stream)
+        self.assertFalse(entrypoint.availability.unlock)
         self.assertEqual(trace.frame, "*7*300##")
 
     def test_state_projects_platform_capabilities(self) -> None:
@@ -46,6 +47,7 @@ class ModelsTest(unittest.TestCase):
                         "label": "Main Gate",
                         "devaddr": "20",
                         "capabilities": {"stream": True, "unlock": True, "ring": True},
+                        "availability": {"unlock": True},
                     },
                     {"id": "disabled", "capabilities": {"stream": False}},
                 ],
@@ -70,6 +72,7 @@ class ModelsTest(unittest.TestCase):
 
         self.assertEqual([entrypoint.id for entrypoint in state.entrypoints], ["main", "disabled"])
         self.assertTrue(state.entrypoints[0].capabilities.unlock)
+        self.assertTrue(state.entrypoints[0].availability.unlock)
         self.assertTrue(state.muted)
         self.assertFalse(state.voicemail_enabled)
         self.assertTrue(state.reboot_enabled)
@@ -104,16 +107,7 @@ class ModelsTest(unittest.TestCase):
 
 
 class ProtocolTest(unittest.TestCase):
-    def test_command_and_ping_messages(self) -> None:
-        self.assertEqual(
-            command_message("cmd-1", "entrypoint.unlock", {"entrypoint_id": "main"}),
-            {
-                "type": "command",
-                "id": "cmd-1",
-                "action": "entrypoint.unlock",
-                "payload": {"entrypoint_id": "main"},
-            },
-        )
+    def test_ping_message(self) -> None:
         self.assertEqual(ping_message("ping-1"), {"type": "ping", "id": "ping-1"})
 
     def test_parse_message_rejects_invalid_envelopes(self) -> None:

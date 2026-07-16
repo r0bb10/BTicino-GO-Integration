@@ -21,7 +21,7 @@ from .const import (
     WEBSOCKET_RECONNECT_MIN_SECONDS,
 )
 from .models import CompanionState, TraceFrame
-from .protocol import ProtocolError, command_message, parse_message, ping_message
+from .protocol import ProtocolError, parse_message, ping_message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +70,6 @@ class CompanionWebSocket:
         self._task: asyncio.Task[None] | None = None
         self._websocket = None
         self._send_lock = asyncio.Lock()
-        self._pending: dict[str, asyncio.Future[Mapping[str, Any]]] = {}
         self._reconnect_attempts = 0
         self._last_error: str | None = None
         self._auth_failed = False
@@ -118,7 +117,6 @@ class CompanionWebSocket:
             except asyncio.CancelledError:
                 pass
         self._connected.clear()
-        self._fail_pending(CompanionWebSocketError("Companion WebSocket stopped"))
 
     async def async_wait_connected(self, timeout: float = WEBSOCKET_CONNECT_TIMEOUT_SECONDS) -> None:
         """Wait for the initial state push."""
@@ -128,24 +126,6 @@ class CompanionWebSocket:
             if self._auth_failed:
                 raise CompanionAuthError("Companion authentication failed") from err
             raise CompanionWebSocketError("timed out connecting to Companion WebSocket") from err
-
-    async def async_command(
-        self,
-        action: str,
-        payload: Mapping[str, Any] | None = None,
-        timeout: float = WEBSOCKET_CONNECT_TIMEOUT_SECONDS,
-    ) -> Mapping[str, Any]:
-        """Send a command and wait for its command_result reply."""
-        if not self._connected.is_set():
-            raise CompanionWebSocketError("Companion WebSocket is not connected")
-        command_id = f"cmd-{uuid4().hex}"
-        future: asyncio.Future[Mapping[str, Any]] = asyncio.get_running_loop().create_future()
-        self._pending[command_id] = future
-        try:
-            await self._async_send(command_message(command_id, action, payload))
-            return await asyncio.wait_for(future, timeout)
-        finally:
-            self._pending.pop(command_id, None)
 
     async def _async_run(self) -> None:
         delay = WEBSOCKET_RECONNECT_MIN_SECONDS
@@ -171,7 +151,6 @@ class CompanionWebSocket:
                 self._connected.clear()
                 self._initial_state.clear()
                 self._websocket = None
-                self._fail_pending(CompanionWebSocketError("Companion WebSocket disconnected"))
 
     async def _async_connect_and_receive(self) -> None:
         if not self._access_token:
@@ -196,8 +175,6 @@ class CompanionWebSocket:
         self._last_error = None
         self._connected.set()
         await self._async_notify_connection(True)
-        await self._async_send(command_message(f"state-{uuid4().hex}", "state.get"))
-
         last_ping = 0.0
         while not self._stop.is_set():
             remaining = max(0.0, WEBSOCKET_PING_INTERVAL_SECONDS - (monotonic() - last_ping))
@@ -236,9 +213,6 @@ class CompanionWebSocket:
                 if isinstance(body, Mapping) and self._on_trace is not None:
                     await self._on_trace(TraceFrame.from_dict(body))
                 return
-            if message_type == "command_result":
-                self._resolve_command(payload)
-                return
             if message_type == "error":
                 body = payload.get("payload")
                 detail = body if isinstance(body, Mapping) else {}
@@ -253,19 +227,6 @@ class CompanionWebSocket:
             raise CompanionWebSocketError("Companion WebSocket closed")
         if message.type is WSMsgType.ERROR:
             raise CompanionWebSocketError("Companion WebSocket failed") from message.data
-
-    def _resolve_command(self, message: Mapping[str, Any]) -> None:
-        command_id = message.get("id")
-        if not isinstance(command_id, str):
-            return
-        future = self._pending.get(command_id)
-        if future is None or future.done():
-            return
-        if message.get("ok") is True:
-            payload = message.get("payload")
-            future.set_result(payload if isinstance(payload, Mapping) else {})
-            return
-        future.set_exception(CompanionWebSocketError("Companion command failed"))
 
     async def _async_send(self, message: Mapping[str, Any]) -> None:
         websocket = self._websocket
@@ -284,9 +245,3 @@ class CompanionWebSocket:
         self._connected.clear() if not connected else None
         if self._on_connection is not None:
             await self._on_connection(connected, self._last_error, self._reconnect_attempts)
-
-    def _fail_pending(self, error: Exception) -> None:
-        for future in self._pending.values():
-            if not future.done():
-                future.set_exception(error)
-        self._pending.clear()

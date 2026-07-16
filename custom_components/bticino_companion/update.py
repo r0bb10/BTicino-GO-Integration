@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         state = runtime.coordinator.data
         if not added and state and state.update.enabled and state.update.exposed:
             added = True
-            async_add_entities([CompanionUpdate(entry, runtime.coordinator)])
+            async_add_entities([CompanionUpdate(entry, runtime.coordinator, runtime.client)])
 
     _add_update()
     entry.async_on_unload(runtime.coordinator.async_add_listener(_add_update))
@@ -43,9 +43,10 @@ class CompanionUpdate(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoo
     _attr_entity_category = EntityCategory.CONFIG
     _attr_supported_features = UpdateEntityFeature.INSTALL
 
-    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator) -> None:
+    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator, client) -> None:
         super().__init__(coordinator)
         self._entry = entry
+        self._client = client
         self._attr_unique_id = f"{entry.unique_id}_firmware_update"
 
     @property
@@ -85,4 +86,4 @@ class CompanionUpdate(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoo
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
         """Request the configured v3 updater; version selection is server-owned."""
         del version, backup, kwargs
-        await self.coordinator.async_command("system.update.install")
+        await self._client.async_install_update()

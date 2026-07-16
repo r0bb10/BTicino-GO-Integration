@@ -10,8 +10,6 @@ PLATFORMS: list[str] = [
     "binary_sensor",
     "button",
     "switch",
-    "camera",
-    "event",
     "update",
 ]
 
@@ -28,11 +26,12 @@ API_PATH_PAIR_CHALLENGE = "/api/v3/pair/challenge"
 API_PATH_PAIR_CLAIM = "/api/v3/pair/claim"
 API_PATH_ISSUE_REPAIR_CODE = "/api/v3/admin/issue-repair-code"
 API_PATH_RESET_CLAIM = "/api/v3/admin/reset-claim"
-API_PATH_WEBRTC_OFFER = "/api/v3/webrtc/offer"
-API_PATH_WEBRTC_CANDIDATE = "/api/v3/webrtc/candidate"
-API_PATH_WEBRTC_CLOSE = "/api/v3/webrtc/close"
-API_PATH_SNAPSHOT_CAPTURE = "/api/v3/control/entrypoints/{entrypoint_id}/snapshot"
-API_PATH_SNAPSHOT_LATEST = "/api/v3/entrypoints/{entrypoint_id}/snapshot/latest.jpg"
+API_PATH_ENTRYPOINT_UNLOCK = "/api/v3/entrypoints/{entrypoint_id}/unlock"
+API_PATH_AUDIO_MUTE = "/api/v3/audio/mute"
+API_PATH_AUDIO_UNMUTE = "/api/v3/audio/unmute"
+API_PATH_VOICEMAIL_ENABLE = "/api/v3/voicemail/enable"
+API_PATH_VOICEMAIL_DISABLE = "/api/v3/voicemail/disable"
+API_PATH_UPDATE_INSTALL = "/api/v3/system/update/install"
 WEBSOCKET_PATH = "/api/v3/ws"
 
 WEBSOCKET_PING_INTERVAL_SECONDS = 25

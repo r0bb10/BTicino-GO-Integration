@@ -50,10 +50,6 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
         """Stop the WebSocket connection."""
         await self.websocket.async_stop()
 
-    async def async_command(self, action: str, payload: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
-        """Send a Companion protocol command."""
-        return await self.websocket.async_command(action, payload)
-
     def async_add_trace_listener(self, listener: Callable[[TraceFrame], None]) -> Callable[[], None]:
         """Register a listener for trace frames without creating another transport."""
         self._trace_listeners.append(listener)
