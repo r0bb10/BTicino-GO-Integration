@@ -33,7 +33,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         entities.extend(_entrypoint_buttons(entry, runtime.coordinator, state, known))
         entities.extend(_call_buttons(entry, runtime.coordinator, state, known))
         entities.extend(_system_buttons(entry, runtime.coordinator, state, known))
-        entities.extend(_update_buttons(entry, runtime.coordinator, state, known))
         if entities:
             async_add_entities(entities)
 
@@ -146,29 +145,6 @@ def _system_buttons(
                     payload={"service": service.name},
                 )
             )
-    return entities
-
-
-def _update_buttons(
-    entry: ConfigEntry, coordinator: CompanionCoordinator, state: CompanionState, known: set[str]
-) -> list[ButtonEntity]:
-    entities: list[ButtonEntity] = []
-    if not state.update.enabled or not state.update.exposed:
-        return entities
-    base = f"{entry.unique_id}_update"
-    unique_id = f"{base}_rollback"
-    if unique_id not in known:
-        known.add(unique_id)
-        entities.append(
-            CompanionCommandButton(
-                entry,
-                coordinator,
-                key="rollback",
-                name="Rollback Firmware",
-                icon="mdi:backup-restore",
-                action="update.rollback",
-            )
-        )
     return entities
 
 

@@ -134,15 +134,6 @@ class ButtonCommandPayloadTest(unittest.IsolatedAsyncioTestCase):
         await entity.async_press()
         coordinator.async_command.assert_awaited_once_with("system.service_restart", {"service": "dropbear"})
 
-    async def test_rollback_sends_update_rollback(self) -> None:
-        entry = _MockEntry()
-        coordinator = _make_coordinator()
-        entity = CompanionCommandButton(
-            entry, coordinator, "rollback", "Rollback Firmware", "mdi:backup-restore", "update.rollback"
-        )
-        await entity.async_press()
-        coordinator.async_command.assert_awaited_once_with("update.rollback", {})
-
 
 class CallButtonTest(unittest.IsolatedAsyncioTestCase):
     async def test_answer_sends_dialog_id(self) -> None:
@@ -204,12 +195,15 @@ class SwitchCommandPayloadTest(unittest.IsolatedAsyncioTestCase):
 
 
 class UpdateCommandPayloadTest(unittest.IsolatedAsyncioTestCase):
-    async def test_install_sends_update_install(self) -> None:
+    async def test_install_requests_server_owned_update(self) -> None:
         entry = _MockEntry()
         coordinator = _make_coordinator()
         entity = CompanionUpdate(entry, coordinator)
         await entity.async_install(version=None, backup=False)
-        coordinator.async_command.assert_awaited_once_with("update.install")
+        self.assertEqual(
+            coordinator.async_command.await_args_list,
+            [unittest.mock.call("system.update.install")],
+        )
 
 
 class RepairApiTest(unittest.IsolatedAsyncioTestCase):
@@ -342,7 +336,7 @@ class SetupEntryTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("device-123_hangup", ids)
         self.assertIn("device-123_reboot", ids)
         self.assertIn("device-123_restart_dropbear", ids)
-        self.assertIn("device-123_rollback", ids)
+        self.assertNotIn("device-123_rollback", ids)
 
     async def test_camera_setup_creates_stream_cameras(self) -> None:
         entry = _MockEntry()

@@ -58,7 +58,10 @@ class ModelsTest(unittest.TestCase):
                         "enabled": True,
                         "exposed": True,
                         "current_version": "3.0.0",
-                        "available": {"version": "3.1.0"},
+                        "latest_version": "3.1.0",
+                        "staged_version": "3.1.0",
+                        "restart_required": True,
+                        "stage": "staged",
                     },
                 },
                 "device": {"model": "C300X", "firmware": "1.2.3", "hardware": "rev-a"},
@@ -73,6 +76,8 @@ class ModelsTest(unittest.TestCase):
         self.assertEqual(state.services[0].name, "dropbear")
         self.assertEqual(state.update.installed_version, "3.0.0")
         self.assertEqual(state.update.latest_version, "3.1.0")
+        self.assertEqual(state.update.staged_version, "3.1.0")
+        self.assertTrue(state.update.restart_required)
         self.assertEqual(state.model, "C300X")
 
     def test_state_uses_pushed_diagnostics_metadata(self) -> None:

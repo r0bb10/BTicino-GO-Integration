@@ -65,6 +65,10 @@ class UpdateInfo:
     exposed: bool = False
     installed_version: str | None = None
     latest_version: str | None = None
+    staged_version: str | None = None
+    restart_required: bool = False
+    stage: str | None = None
+    last_error: str | None = None
     in_progress: bool = False
 
 
@@ -187,8 +191,12 @@ class CompanionState:
                 enabled=bool(update_payload.get("enabled", system.get("update_enabled", False))),
                 exposed=bool(update_payload.get("exposed", system.get("update_exposed", False))),
                 installed_version=_optional_string(update_payload.get("current_version", device.get("firmware"))),
-                latest_version=_optional_string(mapping_at(update_payload, "available").get("version", update_payload.get("latest_version"))),
-                in_progress=bool(update_payload.get("in_progress", False)),
+                latest_version=_optional_string(update_payload.get("latest_version")),
+                staged_version=_optional_string(update_payload.get("staged_version")),
+                restart_required=bool(update_payload.get("restart_required", False)),
+                stage=_optional_string(update_payload.get("stage")),
+                last_error=_optional_string(update_payload.get("error")),
+                in_progress=str(update_payload.get("stage", "")).lower() in {"checking", "staging"},
             ),
             model=_optional_string(device.get("model", payload.get("model"))),
             firmware=diagnostics.firmware or _optional_string(device.get("firmware", payload.get("firmware"))),

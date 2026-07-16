@@ -70,7 +70,19 @@ class CompanionUpdate(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoo
     def in_progress(self) -> bool:
         return bool(self.coordinator.data and self.coordinator.data.update.in_progress)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, str | bool | None]:
+        update = self.coordinator.data.update if self.coordinator.data else None
+        if update is None:
+            return {}
+        return {
+            "stage": update.stage,
+            "staged_version": update.staged_version,
+            "restart_required": update.restart_required,
+            "last_error": update.last_error,
+        }
+
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
         """Request the configured v3 updater; version selection is server-owned."""
         del version, backup, kwargs
-        await self.coordinator.async_command("update.install")
+        await self.coordinator.async_command("system.update.install")
