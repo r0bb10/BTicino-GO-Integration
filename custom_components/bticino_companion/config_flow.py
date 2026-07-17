@@ -20,6 +20,7 @@ from .const import (
     CONF_CLAIM_CODE,
     CONF_COMPANION_URL,
     CONF_DEVICE_ID,
+    CONF_REPAIR_CODE,
     CONF_VERIFY_SSL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
@@ -42,6 +43,7 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._discovered_device_id: str | None = None
         self._discovered_url: str | None = None
+        self._discovered_needs_claim = True
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -66,10 +68,13 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="cannot_connect")
         self._discovered_device_id = device_id
         self._discovered_url = discovered_url
+        self._discovered_needs_claim = _txt(discovery_info.properties, "needs_claim").lower() != "false"
         await self.async_set_unique_id(device_id)
         self._abort_if_unique_id_configured(updates={CONF_COMPANION_URL: self._discovered_url})
         self.context["title_placeholders"] = {"name": _txt(discovery_info.properties, "name") or device_id}
-        return await self.async_step_zeroconf_confirm()
+        if self._discovered_needs_claim:
+            return await self.async_step_zeroconf_confirm()
+        return await self.async_step_zeroconf_recover()
 
     async def async_step_zeroconf_confirm(
         self, user_input: dict[str, Any] | None = None
@@ -96,22 +101,60 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="zeroconf_confirm", data_schema=_claim_schema(), errors=errors
         )
 
+    async def async_step_zeroconf_recover(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Recover credentials for a discovered Companion that is already claimed."""
+        if self._discovered_device_id is None or self._discovered_url is None:
+            return self.async_abort(reason="cannot_connect")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                data = await self._async_authorize(
+                    {
+                        **user_input,
+                        CONF_DEVICE_ID: self._discovered_device_id,
+                        CONF_COMPANION_URL: self._discovered_url,
+                        CONF_VERIFY_SSL: DEFAULT_VERIFY_SSL,
+                    },
+                    recovery=True,
+                )
+            except CompanionApiError as err:
+                _LOGGER.warning("Companion credential recovery failed: %s", type(err).__name__)
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_create_entry(title=f"{NAME} ({data[CONF_DEVICE_ID]})", data=data)
+        return self.async_show_form(
+            step_id="zeroconf_recover", data_schema=_repair_schema(), errors=errors
+        )
+
     async def _async_pair(self, user_input: Mapping[str, Any]) -> dict[str, Any]:
+        return await self._async_authorize(user_input, recovery=False)
+
+    async def _async_authorize(
+        self, user_input: Mapping[str, Any], *, recovery: bool
+    ) -> dict[str, Any]:
         device_id = str(user_input.get(CONF_DEVICE_ID, "")).strip()
         base_url = _normalize_url(str(user_input.get(CONF_COMPANION_URL, "")))
-        claim_code = str(user_input.get(CONF_CLAIM_CODE, "")).strip()
+        code_key = CONF_REPAIR_CODE if recovery else CONF_CLAIM_CODE
+        code = str(user_input.get(code_key, "")).strip()
         verify_ssl = bool(user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
-        if not device_id or not base_url or not claim_code:
-            raise CompanionApiError("device ID, URL, and claim code are required")
+        if not device_id or not base_url or not code:
+            raise CompanionApiError("device ID, URL, and authorization code are required")
         client = CompanionApiClient(async_get_clientsession(self.hass), base_url, "", verify_ssl)
-        _LOGGER.debug("Requesting Companion pairing challenge")
-        challenge = await client.async_pair_challenge()
-        _LOGGER.debug("Submitting Companion pairing claim")
-        await client.async_pair_claim(
-            challenge_id=str(challenge.get("challenge_id", "")),
-            claim_code=claim_code,
-        )
-        _LOGGER.info("Companion pairing completed")
+        if recovery:
+            _LOGGER.debug("Recovering Companion bearer token")
+            await client.async_recover_bearer(code)
+            _LOGGER.info("Companion credential recovery completed")
+        else:
+            _LOGGER.debug("Requesting Companion pairing challenge")
+            challenge = await client.async_pair_challenge()
+            _LOGGER.debug("Submitting Companion pairing claim")
+            await client.async_pair_claim(
+                challenge_id=str(challenge.get("challenge_id", "")),
+                claim_code=code,
+            )
+            _LOGGER.info("Companion pairing completed")
         return {
             CONF_DEVICE_ID: device_id,
             CONF_COMPANION_URL: base_url,
@@ -136,6 +179,14 @@ def _claim_schema() -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_CLAIM_CODE, default=""): str,
+        }
+    )
+
+
+def _repair_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_REPAIR_CODE, default=""): str,
         }
     )
 

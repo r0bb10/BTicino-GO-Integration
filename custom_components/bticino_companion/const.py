@@ -18,6 +18,7 @@ CONF_ACCESS_TOKEN = "access_token"
 CONF_CLAIM_CODE = "claim_code"
 CONF_COMPANION_URL = "companion_url"
 CONF_DEVICE_ID = "device_id"
+CONF_REPAIR_CODE = "repair_code"
 CONF_VERIFY_SSL = "verify_ssl"
 
 DEFAULT_VERIFY_SSL = False

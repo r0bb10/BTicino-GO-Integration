@@ -11,7 +11,13 @@
       },
       "zeroconf_confirm": {
         "data": {
-            "claim_code": "Claim code (xxxx-xxxx)"
+          "claim_code": "Claim code (xxxx-xxxx)"
+        }
+      },
+      "zeroconf_recover": {
+        "description": "This Companion is already claimed. Open the Companion WebUI, issue a temporary recovery code, and enter it here.",
+        "data": {
+          "repair_code": "Recovery code (xxxx-xxxx)"
         }
       }
     },
