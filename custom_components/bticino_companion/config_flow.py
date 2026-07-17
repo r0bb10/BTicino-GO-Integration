@@ -13,7 +13,6 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .api import CompanionApiClient, CompanionApiError
 from .const import (
-    CONF_ACCESS_TOKEN,
     CONF_CLAIM_CODE,
     CONF_COMPANION_URL,
     CONF_DEVICE_ID,
@@ -85,18 +84,16 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_pair(self, user_input: Mapping[str, Any]) -> dict[str, Any]:
         device_id = str(user_input.get(CONF_DEVICE_ID, "")).strip()
         base_url = _normalize_url(str(user_input.get(CONF_COMPANION_URL, "")))
-        access_token = str(user_input.get(CONF_ACCESS_TOKEN, "")).strip()
         claim_code = str(user_input.get(CONF_CLAIM_CODE, "")).strip()
         verify_ssl = bool(user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
-        if not device_id or not base_url or not (access_token or claim_code):
-            raise CompanionApiError("device ID, URL, and credentials are required")
-        client = CompanionApiClient(async_get_clientsession(self.hass), base_url, access_token, verify_ssl)
-        if not access_token:
-            challenge = await client.async_pair_challenge()
-            await client.async_pair_claim(
-                challenge_id=str(challenge.get("challenge_id", "")),
-                claim_code=claim_code,
-            )
+        if not device_id or not base_url or not claim_code:
+            raise CompanionApiError("device ID, URL, and claim code are required")
+        client = CompanionApiClient(async_get_clientsession(self.hass), base_url, "", verify_ssl)
+        challenge = await client.async_pair_challenge()
+        await client.async_pair_claim(
+            challenge_id=str(challenge.get("challenge_id", "")),
+            claim_code=claim_code,
+        )
         return {
             CONF_DEVICE_ID: device_id,
             CONF_COMPANION_URL: base_url,
@@ -111,8 +108,7 @@ def _user_schema(user_input: Mapping[str, Any] | None) -> vol.Schema:
         {
             vol.Required(CONF_DEVICE_ID, default=str(user_input.get(CONF_DEVICE_ID, ""))): str,
             vol.Required(CONF_COMPANION_URL, default=str(user_input.get(CONF_COMPANION_URL, ""))): str,
-            vol.Optional(CONF_ACCESS_TOKEN, default=str(user_input.get(CONF_ACCESS_TOKEN, ""))): str,
-            vol.Optional(CONF_CLAIM_CODE, default=str(user_input.get(CONF_CLAIM_CODE, ""))): str,
+            vol.Required(CONF_CLAIM_CODE, default=str(user_input.get(CONF_CLAIM_CODE, ""))): str,
             vol.Required(CONF_VERIFY_SSL, default=bool(user_input.get(CONF_VERIFY_SSL, False))): bool,
         }
     )
@@ -121,8 +117,7 @@ def _user_schema(user_input: Mapping[str, Any] | None) -> vol.Schema:
 def _claim_schema() -> vol.Schema:
     return vol.Schema(
         {
-            vol.Optional(CONF_ACCESS_TOKEN, default=""): str,
-            vol.Optional(CONF_CLAIM_CODE, default=""): str,
+            vol.Required(CONF_CLAIM_CODE, default=""): str,
         }
     )
 
