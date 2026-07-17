@@ -18,6 +18,9 @@ from .const import (
     API_PATH_UPDATE_INSTALL,
     API_PATH_VOICEMAIL_DISABLE,
     API_PATH_VOICEMAIL_ENABLE,
+    API_PATH_WEBRTC_CANDIDATE,
+    API_PATH_WEBRTC_CLOSE,
+    API_PATH_WEBRTC_OFFER,
 )
 
 
@@ -122,6 +125,38 @@ class CompanionApiClient:
 
     async def async_reboot(self) -> dict[str, Any]:
         return await self._async_request("POST", API_PATH_SYSTEM_REBOOT, auth=True)
+
+    async def async_webrtc_offer(
+        self, *, entrypoint_id: str, offer_sdp: str, session_id: str
+    ) -> dict[str, Any]:
+        """Create a WebRTC answer for an entrypoint stream."""
+        return await self._async_request(
+            "POST",
+            API_PATH_WEBRTC_OFFER,
+            auth=True,
+            json_body={
+                "session_id": session_id,
+                "entrypoint_id": entrypoint_id,
+                "offer_sdp": offer_sdp,
+            },
+        )
+
+    async def async_webrtc_candidate(
+        self, *, session_id: str, candidate: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Forward a Home Assistant WebRTC ICE candidate to Companion."""
+        return await self._async_request(
+            "POST",
+            API_PATH_WEBRTC_CANDIDATE,
+            auth=True,
+            json_body={"session_id": session_id, "candidate": candidate},
+        )
+
+    async def async_webrtc_close(self, *, session_id: str) -> dict[str, Any]:
+        """Close a Companion WebRTC session."""
+        return await self._async_request(
+            "POST", API_PATH_WEBRTC_CLOSE, auth=True, json_body={"session_id": session_id}
+        )
 
     async def _async_request(
         self,

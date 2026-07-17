@@ -1,0 +1,151 @@
+"""Native WebRTC camera entities for Companion entrypoint streams."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from homeassistant.components.camera import Camera, CameraEntityFeature, WebRTCAnswer, WebRTCError, WebRTCSendMessage
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from webrtc_models import RTCIceCandidateInit
+
+from . import IntegrationRuntime
+from .api import CompanionApiError
+from .coordinator import CompanionCoordinator
+from .device_info import device_info
+from .entity import CompanionAvailabilityMixin
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Register dynamic entrypoint cameras."""
+    del hass, async_add_entities
+    runtime: IntegrationRuntime = entry.runtime_data
+    await runtime.dynamic_entities.async_register_platform("camera", async_get_current_platform())
+
+
+class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], Camera):
+    """Expose one Companion WebRTC camera per stream-capable entrypoint."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:video"
+    _attr_supported_features = CameraEntityFeature.STREAM
+
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        coordinator: CompanionCoordinator,
+        client,
+        entrypoint_id: str,
+        name: str,
+    ) -> None:
+        Camera.__init__(self)
+        CoordinatorEntity.__init__(self, coordinator)
+        self._entry = entry
+        self._client = client
+        self._entrypoint_id = entrypoint_id
+        self._attr_name = name
+        self._attr_unique_id = f"{entry.unique_id}_camera_{entrypoint_id}"
+        self._active_webrtc_sessions: set[str] = set()
+
+    @property
+    def device_info(self):
+        """Associate cameras with the Companion device."""
+        return device_info(self._entry, self.coordinator.data)
+
+    @property
+    def available(self) -> bool:
+        """Require both the push transport and stream availability."""
+        state = self.coordinator.data
+        entrypoint = (
+            next((item for item in state.entrypoints if item.id == self._entrypoint_id), None)
+            if state
+            else None
+        )
+        return bool(super().available and entrypoint and entrypoint.availability.stream)
+
+    @property
+    def is_streaming(self) -> bool:
+        """Report whether this entrypoint owns the current preview or call stream."""
+        state = self.coordinator.data
+        return bool(
+            state
+            and state.active_entrypoint_id == self._entrypoint_id
+            and state.call_state in {"preview", "active"}
+        )
+
+    async def async_handle_async_webrtc_offer(
+        self, offer_sdp: str, session_id: str, send_message: WebRTCSendMessage
+    ) -> None:
+        """Send Home Assistant's offer to Companion and return its SDP answer."""
+        self._active_webrtc_sessions.add(session_id)
+        try:
+            response = await self._client.async_webrtc_offer(
+                entrypoint_id=self._entrypoint_id,
+                offer_sdp=offer_sdp,
+                session_id=session_id,
+            )
+        except CompanionApiError as err:
+            self._active_webrtc_sessions.discard(session_id)
+            send_message(WebRTCError("webrtc_offer_failed", str(err)))
+            return
+
+        answer_sdp = response.get("answer_sdp")
+        if not isinstance(answer_sdp, str) or not answer_sdp.strip():
+            self._active_webrtc_sessions.discard(session_id)
+            send_message(WebRTCError("webrtc_offer_failed", "Companion returned an empty answer_sdp"))
+            return
+        send_message(WebRTCAnswer(answer_sdp))
+
+    async def async_on_webrtc_candidate(
+        self, session_id: str, candidate: RTCIceCandidateInit
+    ) -> None:
+        """Forward an ICE candidate to the matching Companion session."""
+        await self._client.async_webrtc_candidate(
+            session_id=session_id, candidate=_candidate_to_payload(candidate)
+        )
+
+    @callback
+    def close_webrtc_session(self, session_id: str) -> None:
+        """Release the Companion media session when HA closes its peer connection."""
+        if session_id not in self._active_webrtc_sessions:
+            return
+        self._active_webrtc_sessions.remove(session_id)
+        self.hass.async_create_background_task(
+            self._async_close_webrtc_session(session_id),
+            f"close Companion WebRTC session {session_id}",
+        )
+
+    async def _async_close_webrtc_session(self, session_id: str) -> None:
+        try:
+            await self._client.async_webrtc_close(session_id=session_id)
+        except CompanionApiError as err:
+            _LOGGER.debug("Unable to close Companion WebRTC session %s: %s", session_id, err)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Release every active Companion media session before removing the camera."""
+        for session_id in tuple(self._active_webrtc_sessions):
+            self.close_webrtc_session(session_id)
+        await super().async_will_remove_from_hass()
+
+    async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
+        """Return no image until Companion snapshot support is implemented."""
+        del width, height
+        return None
+
+
+def _candidate_to_payload(candidate: RTCIceCandidateInit) -> dict[str, Any]:
+    """Serialize a WebRTC candidate for the Companion API."""
+    raw = candidate.to_dict()
+    payload = {"candidate": str(raw.get("candidate", "")).strip()}
+    for key in ("sdpMid", "sdpMLineIndex", "usernameFragment"):
+        value = raw.get(key)
+        if value is not None:
+            payload[key] = value
+    return payload

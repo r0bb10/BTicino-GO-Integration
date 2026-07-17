@@ -120,11 +120,27 @@ class DynamicEntityManager:
 
         # Imports stay here to keep platform modules free of an import cycle.
         from .button import CompanionEntrypointButton, CompanionRebootButton
+        from .camera import CompanionEntrypointCamera
         from .switch import CompanionVoicemailSwitch
         from .update import CompanionUpdate
 
         desired: list[_DesiredEntity] = []
         for entrypoint in state.entrypoints:
+            if entrypoint.capabilities.stream:
+                unique_id = f"{self._entry.unique_id}_camera_{entrypoint.id}"
+                desired.append(
+                    _DesiredEntity(
+                        "camera",
+                        unique_id,
+                        lambda entrypoint=entrypoint: CompanionEntrypointCamera(
+                            self._entry,
+                            self._coordinator,
+                            self._client,
+                            entrypoint.id,
+                            entrypoint.label or entrypoint.id,
+                        ),
+                    )
+                )
             if not entrypoint.capabilities.unlock:
                 continue
             unique_id = f"{self._entry.unique_id}_unlock_{entrypoint.id}"

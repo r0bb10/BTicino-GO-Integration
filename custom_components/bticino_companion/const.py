@@ -6,6 +6,7 @@ DOMAIN = "bticino_companion"
 NAME = "BTicino Companion"
 
 PLATFORMS: list[str] = [
+    "camera",
     "sensor",
     "binary_sensor",
     "button",
@@ -32,6 +33,9 @@ API_PATH_VOICEMAIL_ENABLE = "/api/v3/voicemail/enable"
 API_PATH_VOICEMAIL_DISABLE = "/api/v3/voicemail/disable"
 API_PATH_UPDATE_INSTALL = "/api/v3/system/update/install"
 API_PATH_SYSTEM_REBOOT = "/api/v3/system/reboot"
+API_PATH_WEBRTC_OFFER = "/api/v3/webrtc/offer"
+API_PATH_WEBRTC_CANDIDATE = "/api/v3/webrtc/candidate"
+API_PATH_WEBRTC_CLOSE = "/api/v3/webrtc/close"
 WEBSOCKET_PATH = "/api/v3/ws"
 
 WEBSOCKET_PING_INTERVAL_SECONDS = 25
