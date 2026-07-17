@@ -11,6 +11,7 @@ from .const import (
     API_PATH_PAIR_CHALLENGE,
     API_PATH_PAIR_CLAIM,
     API_PATH_RECOVER_BEARER,
+	API_PATH_SNAPSHOT_LATEST,
     API_PATH_AUDIO_MUTE,
     API_PATH_AUDIO_UNMUTE,
     API_PATH_ENTRYPOINT_UNLOCK,
@@ -157,6 +158,25 @@ class CompanionApiClient:
         return await self._async_request(
             "POST", API_PATH_WEBRTC_CLOSE, auth=True, json_body={"session_id": session_id}
         )
+
+    async def async_entrypoint_snapshot_latest(self, entrypoint_id: str) -> bytes | None:
+        """Return the last passive snapshot without requesting a new capture."""
+        if not self._access_token:
+            raise CompanionAuthError("an access token is required")
+        try:
+            async with self._session.get(
+                f"{self._base_url}{API_PATH_SNAPSHOT_LATEST.format(entrypoint_id=quote(entrypoint_id, safe=''))}",
+                headers={"Accept": "image/jpeg", "Authorization": f"Bearer {self._access_token}"},
+                ssl=self._verify_ssl,
+            ) as response:
+                if response.status == 404:
+                    return None
+                if response.status >= 400:
+                    self._raise_for_status(response, await self._async_json(response))
+                image = await response.read()
+                return image or None
+        except ClientError as err:
+            raise CompanionApiError("unable to contact Companion") from err
 
     async def _async_request(
         self,

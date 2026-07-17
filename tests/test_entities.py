@@ -40,6 +40,7 @@ class _MockEntry:
         self.runtime_data.client.async_webrtc_offer = AsyncMock(return_value={"answer_sdp": "answer-sdp"})
         self.runtime_data.client.async_webrtc_candidate = AsyncMock()
         self.runtime_data.client.async_webrtc_close = AsyncMock()
+        self.runtime_data.client.async_entrypoint_snapshot_latest = AsyncMock(return_value=None)
 
     def async_on_unload(self, listener):
         return lambda: None
@@ -162,6 +163,7 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(send_message.call_args.args[0].answer, "answer-sdp")
         self.assertTrue(camera.available)
+        self.assertTrue(camera.force_update)
 
     async def test_camera_reports_only_its_active_stream(self) -> None:
         entry = _MockEntry()
@@ -178,9 +180,19 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(camera.is_streaming)
         self.assertIsNone(await camera.async_camera_image())
+        entry.runtime_data.client.async_entrypoint_snapshot_latest.assert_awaited_once_with("main")
 
         camera.coordinator.data = _state(call_state="idle", active_entrypoint_id="main", entrypoints=(stream,))
         self.assertFalse(camera.is_streaming)
+
+    async def test_camera_is_available_when_stream_is_configured_but_idle(self) -> None:
+        entry = _MockEntry()
+        stream = Entrypoint.from_dict(
+            {"id": "main", "label": "Main", "capabilities": {"stream": True}, "availability": {"stream": False}}
+        )
+        camera = CompanionEntrypointCamera(entry, _coordinator(_state(entrypoints=(stream,))), entry.runtime_data.client, "main", "Main")
+
+        self.assertTrue(camera.available)
 
 
 class _MockPlatform:

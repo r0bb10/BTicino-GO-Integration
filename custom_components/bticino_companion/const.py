@@ -36,6 +36,7 @@ API_PATH_SYSTEM_REBOOT = "/api/v3/system/reboot"
 API_PATH_WEBRTC_OFFER = "/api/v3/webrtc/offer"
 API_PATH_WEBRTC_CANDIDATE = "/api/v3/webrtc/candidate"
 API_PATH_WEBRTC_CLOSE = "/api/v3/webrtc/close"
+API_PATH_SNAPSHOT_LATEST = "/api/v3/entrypoints/{entrypoint_id}/snapshot/latest.jpg"
 WEBSOCKET_PATH = "/api/v3/ws"
 
 WEBSOCKET_PING_INTERVAL_SECONDS = 25

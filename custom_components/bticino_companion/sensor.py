@@ -20,7 +20,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     del hass
     runtime: IntegrationRuntime = entry.runtime_data
     async_add_entities([
-        CompanionStateSensor(entry, runtime.coordinator, "call_state", "Call State", "mdi:phone"),
         CompanionStateSensor(entry, runtime.coordinator, "active_entrypoint", "Active Entrypoint", "mdi:gate"),
         CompanionDiagnosticSensor(entry, runtime.coordinator, "ip_address", "IP Address", "mdi:ip-network"),
         CompanionDiagnosticSensor(entry, runtime.coordinator, "mac_address", "MAC Address", "mdi:network"),

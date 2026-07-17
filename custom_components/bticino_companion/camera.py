@@ -34,6 +34,7 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
     """Expose one Companion WebRTC camera per stream-capable entrypoint."""
 
     _attr_has_entity_name = True
+    _attr_force_update = True
     _attr_icon = "mdi:video"
     _attr_supported_features = CameraEntityFeature.STREAM
 
@@ -68,7 +69,7 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
             if state
             else None
         )
-        return bool(super().available and entrypoint and entrypoint.availability.stream)
+        return bool(super().available and entrypoint and entrypoint.capabilities.stream)
 
     @property
     def is_streaming(self) -> bool:
@@ -135,9 +136,13 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
         await super().async_will_remove_from_hass()
 
     async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
-        """Return no image until Companion snapshot support is implemented."""
+        """Return the latest passive Companion snapshot, when available."""
         del width, height
-        return None
+        try:
+            return await self._client.async_entrypoint_snapshot_latest(self._entrypoint_id)
+        except CompanionApiError as err:
+            _LOGGER.debug("Unable to fetch snapshot for %s: %s", self._entrypoint_id, err)
+            return None
 
 
 def _candidate_to_payload(candidate: RTCIceCandidateInit) -> dict[str, Any]:
