@@ -5,15 +5,13 @@
         "data": {
           "device_id": "Device ID",
           "companion_url": "Companion URL",
-          "access_token": "Access token",
-          "claim_code": "Claim code (xxxx-xxxx)",
+            "claim_code": "Claim code (xxxx-xxxx)",
           "verify_ssl": "Verify TLS certificate"
         }
       },
       "zeroconf_confirm": {
         "data": {
-          "access_token": "Access token",
-          "claim_code": "Claim code (xxxx-xxxx)"
+            "claim_code": "Claim code (xxxx-xxxx)"
         }
       }
     },
@@ -37,7 +35,10 @@
         "step": {
           "confirm": {
             "title": "Recover Companion Claim",
-            "description": "This will reset the Companion claim and request a new access token."
+            "description": "Open the Companion WebUI, issue a repair code, and enter it here.",
+            "data": {
+              "repair_code": "Repair code"
+            }
           }
         },
         "abort": {
@@ -46,9 +47,8 @@
         "error": {
           "cannot_connect": "Cannot connect to the Companion.",
           "invalid_auth": "Authentication failed.",
-          "claim_failed": "Companion rejected the claim.",
           "repair_code_invalid": "Repair code is invalid or expired.",
-          "repair_not_allowed": "Claim reset is not currently allowed."
+          "repair_not_allowed": "Repair is not currently allowed."
         },
         "create_entry": {
           "default": "Companion claim recovery completed"

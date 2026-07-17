@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -13,6 +14,7 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .api import CompanionApiClient, CompanionApiError
 from .const import (
+	CONF_ACCESS_TOKEN,
     CONF_CLAIM_CODE,
     CONF_COMPANION_URL,
     CONF_DEVICE_ID,
@@ -22,6 +24,8 @@ from .const import (
     DOMAIN,
     NAME,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -38,7 +42,8 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 data = await self._async_pair(user_input)
-            except CompanionApiError:
+            except CompanionApiError as err:
+                _LOGGER.warning("Companion pairing failed: %s", type(err).__name__)
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(data[CONF_DEVICE_ID])
@@ -73,7 +78,8 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL: DEFAULT_VERIFY_SSL,
                     }
                 )
-            except CompanionApiError:
+            except CompanionApiError as err:
+                _LOGGER.warning("Companion pairing failed: %s", type(err).__name__)
                 errors["base"] = "cannot_connect"
             else:
                 return self.async_create_entry(title=f"{NAME} ({data[CONF_DEVICE_ID]})", data=data)
@@ -89,11 +95,14 @@ class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
         if not device_id or not base_url or not claim_code:
             raise CompanionApiError("device ID, URL, and claim code are required")
         client = CompanionApiClient(async_get_clientsession(self.hass), base_url, "", verify_ssl)
+        _LOGGER.debug("Requesting Companion pairing challenge")
         challenge = await client.async_pair_challenge()
+        _LOGGER.debug("Submitting Companion pairing claim")
         await client.async_pair_claim(
             challenge_id=str(challenge.get("challenge_id", "")),
             claim_code=claim_code,
         )
+        _LOGGER.info("Companion pairing completed")
         return {
             CONF_DEVICE_ID: device_id,
             CONF_COMPANION_URL: base_url,

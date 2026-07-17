@@ -8,7 +8,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
@@ -18,20 +18,10 @@ from .entity import CompanionAvailabilityMixin
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Set up audio mute and dynamically supported voicemail controls."""
-    del hass
+    """Set up static mute and register dynamic voicemail lifecycle management."""
     runtime: IntegrationRuntime = entry.runtime_data
     async_add_entities([CompanionMuteSwitch(entry, runtime.coordinator, runtime.client)])
-    added_voicemail = False
-
-    def _add_voicemail() -> None:
-        nonlocal added_voicemail
-        if not added_voicemail and runtime.coordinator.data and runtime.coordinator.data.voicemail_enabled is not None:
-            added_voicemail = True
-            async_add_entities([CompanionVoicemailSwitch(entry, runtime.coordinator, runtime.client)])
-
-    _add_voicemail()
-    entry.async_on_unload(runtime.coordinator.async_add_listener(_add_voicemail))
+    await runtime.dynamic_entities.async_register_platform("switch", async_get_current_platform())
 
 
 class _CompanionSwitch(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], SwitchEntity):

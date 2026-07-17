@@ -8,7 +8,7 @@ from homeassistant.components.update import UpdateDeviceClass, UpdateEntity, Upd
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
@@ -18,20 +18,10 @@ from .entity import CompanionAvailabilityMixin
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Add the update entity only when the server explicitly exposes it."""
-    del hass
+    """Register firmware update lifecycle management."""
+    del hass, async_add_entities
     runtime: IntegrationRuntime = entry.runtime_data
-    added = False
-
-    def _add_update() -> None:
-        nonlocal added
-        state = runtime.coordinator.data
-        if not added and state and state.update.enabled and state.update.exposed:
-            added = True
-            async_add_entities([CompanionUpdate(entry, runtime.coordinator, runtime.client)])
-
-    _add_update()
-    entry.async_on_unload(runtime.coordinator.async_add_listener(_add_update))
+    await runtime.dynamic_entities.async_register_platform("update", async_get_current_platform())
 
 
 class CompanionUpdate(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], UpdateEntity):

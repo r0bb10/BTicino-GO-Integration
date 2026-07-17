@@ -14,6 +14,7 @@ from homeassistant.helpers import issue_registry as ir
 from .api import CompanionApiClient, CompanionAuthError
 from .const import CONF_ACCESS_TOKEN, CONF_COMPANION_URL, CONF_VERIFY_SSL, DOMAIN, ISSUE_CLAIM_RECOVERY, PLATFORMS
 from .coordinator import CompanionCoordinator
+from .dynamic_entities import DynamicEntityManager
 from .websocket import CompanionWebSocketError
 
 
@@ -23,6 +24,7 @@ class IntegrationRuntime:
 
     client: CompanionApiClient
     coordinator: CompanionCoordinator
+    dynamic_entities: DynamicEntityManager
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -44,9 +46,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_stop()
         raise ConfigEntryNotReady(str(err)) from err
 
-    runtime = IntegrationRuntime(client=client, coordinator=coordinator)
+    dynamic_entities = DynamicEntityManager(hass, entry, coordinator, client)
+    runtime = IntegrationRuntime(
+        client=client,
+        coordinator=coordinator,
+        dynamic_entities=dynamic_entities,
+    )
     entry.runtime_data = runtime
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
+    dynamic_entities.async_start()
     _delete_claim_recovery_issue(hass, entry.entry_id)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))

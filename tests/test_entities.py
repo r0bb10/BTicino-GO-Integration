@@ -11,9 +11,10 @@ COMPONENT_PATH = Path(__file__).parents[1] / "custom_components"
 sys.path.insert(0, str(COMPONENT_PATH))
 
 try:
-    from bticino_companion.button import CompanionEntrypointButton, CompanionRebootButton, async_setup_entry as button_async_setup_entry
+    from bticino_companion.button import CompanionEntrypointButton, CompanionRebootButton
     from bticino_companion.api import CompanionApiClient
     from bticino_companion.coordinator import CompanionCoordinator
+    from bticino_companion.dynamic_entities import DynamicEntityManager
     from bticino_companion.models import CompanionState, Diagnostics, Entrypoint, UpdateInfo
     from bticino_companion.switch import CompanionMuteSwitch, CompanionVoicemailSwitch
     from bticino_companion.update import CompanionUpdate
@@ -67,7 +68,13 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         entrypoint = Entrypoint.from_dict(
             {"id": "main", "label": "Main Gate", "capabilities": {"unlock": True}, "availability": {"unlock": True}}
         )
-        entity = CompanionEntrypointButton(entry, coordinator, entry.runtime_data.client, entrypoint, "unlock_main", "Main Gate", "mdi:door-open")
+        entity = CompanionEntrypointButton(
+            entry,
+            coordinator,
+            entry.runtime_data.client,
+            entrypoint.id,
+            "Main Gate",
+        )
 
         await entity.async_press()
 
@@ -112,21 +119,65 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         client._async_request.assert_awaited_once_with("POST", "/api/v3/system/reboot", auth=True)
 
 
-class SetupTest(unittest.IsolatedAsyncioTestCase):
-    async def test_button_setup_exposes_one_config_reboot_button_when_enabled(self) -> None:
+class _MockPlatform:
+    def __init__(self) -> None:
+        self.entities: dict[str, object] = {}
+        self.added: list[object] = []
+        self.removed: list[str] = []
+
+    async def async_add_entities(self, entities) -> None:
+        for entity in entities:
+            self.added.append(entity)
+            self.entities[f"entity_{len(self.entities)}"] = entity
+
+    async def async_remove_entity(self, entity_id: str) -> None:
+        self.removed.append(entity_id)
+        self.entities.pop(entity_id)
+
+
+class DynamicEntityManagerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_reconciles_entrypoint_capability_changes_and_readd(self) -> None:
         entry = _MockEntry()
-        state = _state(
-            reboot_enabled=True,
+        unlocked = Entrypoint.from_dict(
+            {"id": "main", "label": "Main", "capabilities": {"unlock": True}, "availability": {"unlock": True}}
+        )
+        entry.runtime_data.coordinator = _coordinator(_state(entrypoints=(unlocked,)))
+        manager = DynamicEntityManager(
+            MagicMock(),
+            entry,
+            entry.runtime_data.coordinator,
+            entry.runtime_data.client,
+        )
+        platform = _MockPlatform()
+
+        await manager.async_register_platform("button", platform)
+
+        self.assertEqual([entity.unique_id for entity in platform.added], ["device-123_unlock_main"])
+
+        disabled = Entrypoint.from_dict(
+            {"id": "main", "label": "Main", "capabilities": {"unlock": False}}
+        )
+        entry.runtime_data.coordinator.data = _state(entrypoints=(disabled,))
+        await manager.async_reconcile()
+        self.assertEqual(len(platform.removed), 1)
+
+        entry.runtime_data.coordinator.data = _state(
             entrypoints=(
-                Entrypoint.from_dict(
-                    {"id": "main", "label": "Main", "capabilities": {"unlock": True, "stream": True}, "availability": {"unlock": True}}
-                ),
+                unlocked,
             )
         )
-        entry.runtime_data.coordinator = _coordinator(state)
-        added: list = []
+        await manager.async_reconcile()
 
-        await button_async_setup_entry(MagicMock(), entry, added.extend)
+        self.assertEqual(
+            [entity.unique_id for entity in platform.added],
+            ["device-123_unlock_main", "device-123_unlock_main"],
+        )
 
-        self.assertEqual([entity.unique_id for entity in added], ["device-123_unlock_main", "device-123_reboot"])
-        self.assertEqual(added[1].entity_category, "config")
+        replacement = Entrypoint.from_dict(
+            {"id": "side", "label": "Side", "capabilities": {"unlock": True}}
+        )
+        entry.runtime_data.coordinator.data = _state(entrypoints=(replacement,))
+        await manager.async_reconcile()
+
+        self.assertEqual(len(platform.removed), 2)
+        self.assertEqual(platform.added[-1].unique_id, "device-123_unlock_side")

@@ -6,62 +6,20 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import IntegrationRuntime
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
 from .entity import CompanionAvailabilityMixin
-from .models import CompanionState, Entrypoint
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Add capability-gated action entities as entrypoints arrive."""
-    del hass
+    """Register button lifecycle management for dynamic Companion controls."""
+    del hass, async_add_entities
     runtime: IntegrationRuntime = entry.runtime_data
-    known: set[str] = set()
-
-    def _add_entities() -> None:
-        state = runtime.coordinator.data
-        if state is None:
-            return
-        entities: list[ButtonEntity] = []
-        entities.extend(_entrypoint_buttons(entry, runtime.coordinator, runtime.client, state, known))
-        if state.reboot_enabled:
-            unique_id = f"{entry.unique_id}_reboot"
-            if unique_id not in known:
-                known.add(unique_id)
-                entities.append(CompanionRebootButton(entry, runtime.coordinator, runtime.client))
-        if entities:
-            async_add_entities(entities)
-
-    _add_entities()
-    entry.async_on_unload(runtime.coordinator.async_add_listener(_add_entities))
-
-
-def _entrypoint_buttons(
-    entry: ConfigEntry, coordinator: CompanionCoordinator, client, state: CompanionState, known: set[str]
-) -> list[ButtonEntity]:
-    entities: list[ButtonEntity] = []
-    for entrypoint in state.entrypoints:
-        base = f"{entry.unique_id}_{entrypoint.id}"
-        if entrypoint.capabilities.unlock:
-            unique_id = f"{base}_unlock"
-            if unique_id not in known:
-                known.add(unique_id)
-                entities.append(
-                    CompanionEntrypointButton(
-                        entry,
-                        coordinator,
-                        client,
-                        entrypoint,
-                        key=f"unlock_{entrypoint.id}",
-                        name=entrypoint.label or entrypoint.id,
-                        icon="mdi:door-open",
-                    )
-                )
-    return entities
+    await runtime.dynamic_entities.async_register_platform("button", async_get_current_platform())
 
 
 class _CompanionButton(CompanionAvailabilityMixin, CoordinatorEntity[CompanionCoordinator], ButtonEntity):
@@ -99,21 +57,21 @@ class CompanionEntrypointButton(_CompanionButton):
         entry: ConfigEntry,
         coordinator: CompanionCoordinator,
         client,
-        entrypoint: Entrypoint,
-        key: str,
+        entrypoint_id: str,
         name: str,
-        icon: str,
     ) -> None:
-        super().__init__(entry, coordinator, key, name, icon)
-        self._entrypoint = entrypoint
+        super().__init__(entry, coordinator, f"unlock_{entrypoint_id}", name, "mdi:door-open")
+        self._entrypoint_id = entrypoint_id
         self._client = client
 
     @property
     def available(self) -> bool:
-        return super().available and self._entrypoint.availability.unlock
+        state = self.coordinator.data
+        entrypoint = next((item for item in state.entrypoints if item.id == self._entrypoint_id), None) if state else None
+        return bool(super().available and entrypoint and entrypoint.availability.unlock)
 
     async def async_press(self) -> None:
-        await self._client.async_unlock_entrypoint(self._entrypoint.id)
+        await self._client.async_unlock_entrypoint(self._entrypoint_id)
 
 
 class CompanionRebootButton(_CompanionButton):

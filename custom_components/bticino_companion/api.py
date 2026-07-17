@@ -10,8 +10,7 @@ from aiohttp import ClientError, ClientResponse, ClientSession
 from .const import (
     API_PATH_PAIR_CHALLENGE,
     API_PATH_PAIR_CLAIM,
-    API_PATH_ISSUE_REPAIR_CODE,
-    API_PATH_RESET_CLAIM,
+    API_PATH_RECOVER_BEARER,
     API_PATH_AUDIO_MUTE,
     API_PATH_AUDIO_UNMUTE,
     API_PATH_ENTRYPOINT_UNLOCK,
@@ -94,13 +93,16 @@ class CompanionApiClient:
         self._access_token = access_token
         return payload
 
-    async def async_issue_repair_code(self) -> dict[str, Any]:
-        return await self._async_request("POST", API_PATH_ISSUE_REPAIR_CODE, auth=True)
-
-    async def async_reset_claim(self, repair_code: str) -> dict[str, Any]:
-        return await self._async_request(
-            "POST", API_PATH_RESET_CLAIM, auth=True, json_body={"repair_code": repair_code}
+    async def async_recover_bearer(self, repair_code: str) -> dict[str, Any]:
+        """Exchange an owner-issued repair code for a replacement bearer token."""
+        payload = await self._async_request(
+            "POST", API_PATH_RECOVER_BEARER, auth=False, json_body={"repair_code": repair_code}
         )
+        access_token = str(payload.get("access_token", "")).strip()
+        if not access_token:
+            raise CompanionApiError("bearer recovery response did not contain an access token")
+        self._access_token = access_token
+        return payload
 
     async def async_unlock_entrypoint(self, entrypoint_id: str) -> dict[str, Any]:
         return await self._async_request(

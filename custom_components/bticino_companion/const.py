@@ -24,8 +24,7 @@ DEFAULT_PORT = 8080
 
 API_PATH_PAIR_CHALLENGE = "/api/v3/pair/challenge"
 API_PATH_PAIR_CLAIM = "/api/v3/pair/claim"
-API_PATH_ISSUE_REPAIR_CODE = "/api/v3/admin/issue-repair-code"
-API_PATH_RESET_CLAIM = "/api/v3/admin/reset-claim"
+API_PATH_RECOVER_BEARER = "/api/v3/auth/recover"
 API_PATH_ENTRYPOINT_UNLOCK = "/api/v3/entrypoints/{entrypoint_id}/unlock"
 API_PATH_AUDIO_MUTE = "/api/v3/audio/mute"
 API_PATH_AUDIO_UNMUTE = "/api/v3/audio/unmute"

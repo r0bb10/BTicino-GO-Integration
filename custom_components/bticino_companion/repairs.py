@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -15,9 +16,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import CompanionApiClient, CompanionApiError, CompanionAuthError
 from .const import CONF_ACCESS_TOKEN, CONF_COMPANION_URL, CONF_VERIFY_SSL, ISSUE_CLAIM_RECOVERY
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class ClaimRecoveryRepairFlow(RepairsFlow):
-    """Reset and re-claim Companion credentials."""
+    """Recover Companion credentials with an owner-issued repair code."""
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self.hass = hass
@@ -35,26 +38,30 @@ class ClaimRecoveryRepairFlow(RepairsFlow):
             client = CompanionApiClient(
                 async_get_clientsession(self.hass),
                 str(entry.data[CONF_COMPANION_URL]),
-                str(entry.data[CONF_ACCESS_TOKEN]),
+                "",
                 bool(entry.data.get(CONF_VERIFY_SSL, False)),
             )
             try:
-                issued = await client.async_issue_repair_code()
-                reset = await client.async_reset_claim(str(issued["repair_code"]))
-                challenge = await client.async_pair_challenge()
-                claim = await client.async_pair_claim(
-                    challenge_id=str(challenge["challenge_id"]), claim_code=str(reset["claim_code"])
-                )
-            except CompanionAuthError:
-                errors["base"] = "invalid_auth"
+                _LOGGER.debug("Starting Companion credential recovery")
+                recovered = await client.async_recover_bearer(str(user_input["repair_code"]))
+            except CompanionAuthError as err:
+                _LOGGER.warning("Companion credential recovery rejected: %s", type(err).__name__)
+                errors["base"] = "cannot_connect"
             except (CompanionApiError, KeyError) as err:
-                errors["base"] = err.code if isinstance(err, CompanionApiError) else "cannot_connect"
+                _LOGGER.warning(
+                    "Companion credential recovery failed: %s",
+                    type(err).__name__,
+                )
+                errors["base"] = "cannot_connect"
             else:
-                data = {**entry.data, CONF_ACCESS_TOKEN: str(claim["access_token"])}
+                data = {**entry.data, CONF_ACCESS_TOKEN: str(recovered["access_token"])}
                 self.hass.config_entries.async_update_entry(entry, data=data)
                 await self.hass.config_entries.async_reload(entry.entry_id)
+                _LOGGER.info("Companion credential recovery completed")
                 return self.async_create_entry(title="", data={})
-        return self.async_show_form(step_id="confirm", data_schema=vol.Schema({}), errors=errors)
+        return self.async_show_form(
+            step_id="confirm", data_schema=vol.Schema({vol.Required("repair_code"): str}), errors=errors
+        )
 
 
 async def async_create_fix_flow(
