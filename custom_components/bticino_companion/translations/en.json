@@ -3,18 +3,16 @@
     "step": {
       "user": {
         "data": {
-          "device_id": "Device ID",
-          "companion_url": "Companion URL",
-            "claim_code": "Claim code (xxxx-xxxx)",
-          "verify_ssl": "Verify TLS certificate"
+          "companion_url": "Companion URL"
         }
       },
-      "zeroconf_confirm": {
+      "claim": {
+        "description": "Open the Companion Home Assistant page and enter its initial claim code.",
         "data": {
           "claim_code": "Claim code (xxxx-xxxx)"
         }
       },
-      "zeroconf_recover": {
+      "recover": {
         "description": "This Companion is already claimed. Open the Companion WebUI, issue a temporary recovery code, and enter it here.",
         "data": {
           "repair_code": "Recovery code (xxxx-xxxx)"
@@ -23,6 +21,12 @@
     },
     "error": {
       "cannot_connect": "Cannot connect to the Companion."
+    },
+    "abort": {
+      "setup_required": "Finish the Companion WebUI setup before connecting Home Assistant.",
+      "pairing_error": "Companion pairing needs attention. Open its Home Assistant page for details.",
+      "wrong_device": "The Companion no longer matches this Home Assistant entry.",
+      "reauth_started": "Companion credentials need to be updated."
     }
   },
   "entity": {
@@ -30,34 +34,6 @@
       "openwebnet_trace": {
         "state_attributes": {
           "frame": {"name": "Frame"}
-        }
-      }
-    }
-  },
-  "issues": {
-    "claim_recovery": {
-      "title": "Companion credentials need recovery",
-      "fix_flow": {
-        "step": {
-          "confirm": {
-            "title": "Recover Companion Claim",
-            "description": "Open the Companion WebUI, issue a repair code, and enter it here.",
-            "data": {
-              "repair_code": "Repair code"
-            }
-          }
-        },
-        "abort": {
-          "entry_missing": "Config entry is missing"
-        },
-        "error": {
-          "cannot_connect": "Cannot connect to the Companion.",
-          "invalid_auth": "Authentication failed.",
-          "repair_code_invalid": "Repair code is invalid or expired.",
-          "repair_not_allowed": "Repair is not currently allowed."
-        },
-        "create_entry": {
-          "default": "Companion claim recovery completed"
         }
       }
     }

@@ -6,6 +6,7 @@ DOMAIN = "bticino_companion"
 NAME = "BTicino Companion"
 DATA_CAMERA_ENTITIES = f"{DOMAIN}_camera_entities"
 DATA_FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
+DATA_PENDING_REAUTH_URLS = f"{DOMAIN}_pending_reauth_urls"
 FRONTEND_PATH = "/bticino_companion_static"
 
 PLATFORMS: list[str] = [
@@ -21,15 +22,14 @@ CONF_ACCESS_TOKEN = "access_token"
 CONF_CLAIM_CODE = "claim_code"
 CONF_COMPANION_URL = "companion_url"
 CONF_DEVICE_ID = "device_id"
+CONF_INSTANCE_ID = "instance_id"
 CONF_REPAIR_CODE = "repair_code"
-CONF_VERIFY_SSL = "verify_ssl"
-
-DEFAULT_VERIFY_SSL = False
 DEFAULT_PORT = 8080
 
 API_PATH_PAIR_CHALLENGE = "/api/v3/pair/challenge"
 API_PATH_PAIR_CLAIM = "/api/v3/pair/claim"
 API_PATH_RECOVER_BEARER = "/api/v3/auth/recover"
+API_PATH_AUTH_STATUS = "/api/v3/auth/status"
 API_PATH_ENTRYPOINT_UNLOCK = "/api/v3/entrypoints/{entrypoint_id}/unlock"
 API_PATH_AUDIO_MUTE = "/api/v3/audio/mute"
 API_PATH_AUDIO_UNMUTE = "/api/v3/audio/unmute"
@@ -47,5 +47,3 @@ WEBSOCKET_PING_INTERVAL_SECONDS = 25
 WEBSOCKET_RECONNECT_MIN_SECONDS = 1
 WEBSOCKET_RECONNECT_MAX_SECONDS = 30
 WEBSOCKET_CONNECT_TIMEOUT_SECONDS = 10
-
-ISSUE_CLAIM_RECOVERY = "claim_recovery"

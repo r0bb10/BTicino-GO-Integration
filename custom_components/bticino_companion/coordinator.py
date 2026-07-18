@@ -29,7 +29,6 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
             session=client.session,
             base_url=client.base_url,
             access_token=client.access_token,
-            verify_ssl=client.verify_ssl,
             on_state=self._async_handle_state,
             on_event=self._async_handle_event,
             on_trace=self._async_handle_trace,
@@ -49,6 +48,10 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
     async def async_stop(self) -> None:
         """Stop the WebSocket connection."""
         await self.websocket.async_stop()
+
+    async def async_update_base_url(self, base_url: str) -> None:
+        """Reconnect the push transport at a newly discovered endpoint."""
+        await self.websocket.async_update_base_url(base_url)
 
     def async_add_trace_listener(self, listener: Callable[[TraceFrame], None]) -> Callable[[], None]:
         """Register a listener for trace frames without creating another transport."""

@@ -14,6 +14,7 @@ from .const import (
 	API_PATH_SNAPSHOT_LATEST,
     API_PATH_AUDIO_MUTE,
     API_PATH_AUDIO_UNMUTE,
+    API_PATH_AUTH_STATUS,
     API_PATH_ENTRYPOINT_UNLOCK,
     API_PATH_SYSTEM_REBOOT,
     API_PATH_UPDATE_INSTALL,
@@ -45,12 +46,10 @@ class CompanionApiClient:
         session: ClientSession,
         base_url: str,
         access_token: str = "",
-        verify_ssl: bool = False,
     ) -> None:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._access_token = access_token.strip()
-        self._verify_ssl = verify_ssl
 
     @property
     def access_token(self) -> str:
@@ -67,16 +66,13 @@ class CompanionApiClient:
         """Return the current Companion base URL."""
         return self._base_url
 
-    @property
-    def verify_ssl(self) -> bool:
-        """Return the configured TLS verification setting."""
-        return self._verify_ssl
-
-    def update_runtime_config(self, *, base_url: str, access_token: str, verify_ssl: bool) -> None:
-        """Update config-entry values without recreating the shared client."""
+    def update_base_url(self, base_url: str) -> None:
+        """Use a newly discovered Companion endpoint."""
         self._base_url = base_url.rstrip("/")
-        self._access_token = access_token.strip()
-        self._verify_ssl = verify_ssl
+
+    async def async_get_pairing_status(self) -> dict[str, Any]:
+        """Return the Companion's public, non-secret pairing state."""
+        return await self._async_request("GET", API_PATH_AUTH_STATUS, auth=False)
 
     async def async_pair_challenge(self) -> dict[str, Any]:
         return await self._async_request("POST", API_PATH_PAIR_CHALLENGE, auth=False)
@@ -167,7 +163,6 @@ class CompanionApiClient:
             async with self._session.get(
                 f"{self._base_url}{API_PATH_SNAPSHOT_LATEST.format(entrypoint_id=quote(entrypoint_id, safe=''))}",
                 headers={"Accept": "image/jpeg", "Authorization": f"Bearer {self._access_token}"},
-                ssl=self._verify_ssl,
             ) as response:
                 if response.status == 404:
                     return None
@@ -213,7 +208,6 @@ class CompanionApiClient:
                 f"{self._base_url}{path}",
                 headers=headers,
                 json=json_body,
-                ssl=self._verify_ssl,
             )
         except ClientError as err:
             raise CompanionApiError("unable to contact Companion") from err

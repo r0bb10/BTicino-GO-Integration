@@ -1,4 +1,4 @@
-"""Configuration flow for BTicino Companion v3."""
+"""Configuration and reauthentication flow for BTicino Companion v3."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import ipaddress
 import logging
 import re
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import voluptuous as vol
 
@@ -16,15 +17,15 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .api import CompanionApiClient, CompanionApiError
 from .const import (
-	CONF_ACCESS_TOKEN,
+    CONF_ACCESS_TOKEN,
     CONF_CLAIM_CODE,
     CONF_COMPANION_URL,
     CONF_DEVICE_ID,
+    CONF_INSTANCE_ID,
     CONF_REPAIR_CODE,
-    CONF_VERIFY_SSL,
-    DEFAULT_VERIFY_SSL,
+    DATA_PENDING_REAUTH_URLS,
+    DEFAULT_PORT,
     DOMAIN,
-    NAME,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,169 +34,224 @@ _HOSTNAME_RE = re.compile(
     r"(?=.{1,253}\Z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*"
     r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\Z"
 )
+_PAIRING_STATES = frozenset({"setup_required", "claimable", "claimed", "error"})
 
 
 class CompanionConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Configure a Companion using its stable device ID."""
+    """Configure a Companion using its physical device ID and installation ID."""
 
     VERSION = 1
 
     def __init__(self) -> None:
-        self._discovered_device_id: str | None = None
-        self._discovered_url: str | None = None
-        self._discovered_needs_claim = True
+        self._device_id = ""
+        self._url = ""
+        self._model = ""
+        self._instance_id = ""
+        self._pairing_state = "error"
+        self._is_reauth = False
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Start manual setup by looking up the Companion's public state."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            base_url = _normalize_url(str(user_input.get(CONF_COMPANION_URL, "")))
             try:
-                data = await self._async_pair(user_input)
+                await self._async_load_pairing_status(base_url)
             except CompanionApiError as err:
-                _LOGGER.warning("Companion pairing failed: %s", type(err).__name__)
+                _LOGGER.warning("Companion pairing status lookup failed: %s", type(err).__name__)
                 errors["base"] = "cannot_connect"
             else:
-                await self.async_set_unique_id(data[CONF_DEVICE_ID])
-                self._abort_if_unique_id_configured(updates={CONF_COMPANION_URL: data[CONF_COMPANION_URL]})
-                return self.async_create_entry(title=f"{NAME} ({data[CONF_DEVICE_ID]})", data=data)
+                await self.async_set_unique_id(self._device_id)
+                self._abort_if_unique_id_configured(updates={CONF_COMPANION_URL: self._url})
+                return await self._async_step_for_pairing_state()
         return self.async_show_form(step_id="user", data_schema=_user_schema(user_input), errors=errors)
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
+        """Use Companion mDNS data to select the initial authorization flow."""
         device_id = _txt(discovery_info.properties, "device_id")
         discovered_url = _zeroconf_url(
             getattr(discovery_info, "host", None), getattr(discovery_info, "port", None)
         )
-        if not device_id or not discovered_url:
+        pairing_state = _txt(discovery_info.properties, "pairing_state")
+        if not device_id or not discovered_url or pairing_state not in _PAIRING_STATES:
             return self.async_abort(reason="cannot_connect")
-        self._discovered_device_id = device_id
-        self._discovered_url = discovered_url
-        self._discovered_needs_claim = _txt(discovery_info.properties, "needs_claim").lower() != "false"
-        await self.async_set_unique_id(device_id)
-        self._abort_if_unique_id_configured(updates={CONF_COMPANION_URL: self._discovered_url})
-        self.context["title_placeholders"] = {"name": _txt(discovery_info.properties, "name") or device_id}
-        if self._discovered_needs_claim:
-            return await self.async_step_zeroconf_confirm()
-        return await self.async_step_zeroconf_recover()
 
-    async def async_step_zeroconf_confirm(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if self._discovered_device_id is None or self._discovered_url is None:
+        try:
+            self._set_pairing_status(
+                {
+                    CONF_DEVICE_ID: device_id,
+                    "model": _txt(discovery_info.properties, "model"),
+                    CONF_INSTANCE_ID: _txt(discovery_info.properties, "instance_id"),
+                    "pairing_state": pairing_state,
+                },
+                discovered_url,
+            )
+        except CompanionApiError:
             return self.async_abort(reason="cannot_connect")
+        await self.async_set_unique_id(self._device_id)
+        existing_entries = self._async_current_entries()
+        if existing_entries:
+            return await self._async_handle_existing_discovery(existing_entries[0])
+        self.context["title_placeholders"] = {"name": self._model or self._device_id}
+        return await self._async_step_for_pairing_state()
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        """Select claim or recovery after Home Assistant loses authorization."""
+        self._is_reauth = True
+        entry = self._get_reauth_entry()
+        pending_urls = self.hass.data.setdefault(DOMAIN, {}).setdefault(
+            DATA_PENDING_REAUTH_URLS, {}
+        )
+        base_url = pending_urls.pop(
+            entry.entry_id, _normalize_url(str(entry_data.get(CONF_COMPANION_URL, "")))
+        )
+        try:
+            await self._async_load_pairing_status(base_url)
+        except CompanionApiError as err:
+            _LOGGER.warning("Companion reauthentication status lookup failed: %s", type(err).__name__)
+            return self.async_abort(reason="cannot_connect")
+
+        if self._device_id != str(entry_data.get(CONF_DEVICE_ID, "")).strip():
+            return self.async_abort(reason="wrong_device")
+        await self.async_set_unique_id(self._device_id)
+        return await self._async_step_for_pairing_state()
+
+    async def _async_handle_existing_discovery(self, entry: Any) -> ConfigFlowResult:
+        stored_instance_id = str(entry.data.get(CONF_INSTANCE_ID, "")).strip()
+        if stored_instance_id == self._instance_id and self._pairing_state == "claimed":
+            self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_COMPANION_URL: self._url}
+            )
+            runtime = self.hass.data.get(DOMAIN, {}).get(entry.entry_id)
+            if runtime is not None:
+                await runtime.async_update_base_url(self._url)
+            return self.async_abort(reason="already_configured")
+
+        pending_urls = self.hass.data.setdefault(DOMAIN, {}).setdefault(
+            DATA_PENDING_REAUTH_URLS, {}
+        )
+        pending_urls[entry.entry_id] = self._url
+        entry.async_start_reauth(self.hass)
+        return self.async_abort(reason="reauth_started")
+
+    async def async_step_claim(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Claim an unpaired Companion with its owner-visible initial code."""
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                data = await self._async_pair(
-                    {
-                        **user_input,
-                        CONF_DEVICE_ID: self._discovered_device_id,
-                        CONF_COMPANION_URL: self._discovered_url,
-                        CONF_VERIFY_SSL: DEFAULT_VERIFY_SSL,
-                    }
-                )
+                data = await self._async_authorize(str(user_input.get(CONF_CLAIM_CODE, "")), recovery=False)
             except CompanionApiError as err:
-                _LOGGER.warning("Companion pairing failed: %s", type(err).__name__)
+                _LOGGER.warning("Companion initial claim failed: %s", type(err).__name__)
                 errors["base"] = "cannot_connect"
             else:
-                return self.async_create_entry(title=f"{NAME} ({data[CONF_DEVICE_ID]})", data=data)
-        return self.async_show_form(
-            step_id="zeroconf_confirm", data_schema=_claim_schema(), errors=errors
-        )
+                return await self._async_finish_authorization(data)
+        return self.async_show_form(step_id="claim", data_schema=_claim_schema(), errors=errors)
 
-    async def async_step_zeroconf_recover(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Recover credentials for a discovered Companion that is already claimed."""
-        if self._discovered_device_id is None or self._discovered_url is None:
-            return self.async_abort(reason="cannot_connect")
+    async def async_step_recover(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Recover an already-claimed Companion with an owner-issued code."""
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                data = await self._async_authorize(
-                    {
-                        **user_input,
-                        CONF_DEVICE_ID: self._discovered_device_id,
-                        CONF_COMPANION_URL: self._discovered_url,
-                        CONF_VERIFY_SSL: DEFAULT_VERIFY_SSL,
-                    },
-                    recovery=True,
-                )
+                data = await self._async_authorize(str(user_input.get(CONF_REPAIR_CODE, "")), recovery=True)
             except CompanionApiError as err:
                 _LOGGER.warning("Companion credential recovery failed: %s", type(err).__name__)
                 errors["base"] = "cannot_connect"
             else:
-                return self.async_create_entry(title=f"{NAME} ({data[CONF_DEVICE_ID]})", data=data)
-        return self.async_show_form(
-            step_id="zeroconf_recover", data_schema=_repair_schema(), errors=errors
+                return await self._async_finish_authorization(data)
+        return self.async_show_form(step_id="recover", data_schema=_repair_schema(), errors=errors)
+
+    async def _async_step_for_pairing_state(self) -> ConfigFlowResult:
+        if self._pairing_state == "claimable":
+            return await self.async_step_claim()
+        if self._pairing_state == "claimed":
+            return await self.async_step_recover()
+        if self._pairing_state == "setup_required":
+            return self.async_abort(reason="setup_required")
+        return self.async_abort(reason="pairing_error")
+
+    async def _async_load_pairing_status(self, base_url: str) -> None:
+        if not base_url:
+            raise CompanionApiError("Companion URL is required")
+        client = CompanionApiClient(async_get_clientsession(self.hass), base_url)
+        status = await client.async_get_pairing_status()
+        self._set_pairing_status(status, base_url)
+
+    def _set_pairing_status(self, status: Mapping[str, Any], base_url: str) -> None:
+        device_id = str(status.get(CONF_DEVICE_ID, "")).strip()
+        instance_id = str(status.get(CONF_INSTANCE_ID, "")).strip()
+        pairing_state = str(status.get("pairing_state", "")).strip()
+        if not device_id or not instance_id or pairing_state not in _PAIRING_STATES:
+            raise CompanionApiError("Companion returned an invalid pairing status")
+        self._device_id = device_id
+        self._url = base_url
+        self._model = str(status.get("model", "")).strip()
+        self._instance_id = instance_id
+        self._pairing_state = pairing_state
+
+    async def _async_authorize(self, code: str, *, recovery: bool) -> dict[str, Any]:
+        code = code.strip()
+        if not self._device_id or not self._url or not code:
+            raise CompanionApiError("Companion authorization details are required")
+        client = CompanionApiClient(
+            async_get_clientsession(self.hass), self._url
         )
-
-    async def _async_pair(self, user_input: Mapping[str, Any]) -> dict[str, Any]:
-        return await self._async_authorize(user_input, recovery=False)
-
-    async def _async_authorize(
-        self, user_input: Mapping[str, Any], *, recovery: bool
-    ) -> dict[str, Any]:
-        device_id = str(user_input.get(CONF_DEVICE_ID, "")).strip()
-        base_url = _normalize_url(str(user_input.get(CONF_COMPANION_URL, "")))
-        code_key = CONF_REPAIR_CODE if recovery else CONF_CLAIM_CODE
-        code = str(user_input.get(code_key, "")).strip()
-        verify_ssl = bool(user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
-        if not device_id or not base_url or not code:
-            raise CompanionApiError("device ID, URL, and authorization code are required")
-        client = CompanionApiClient(async_get_clientsession(self.hass), base_url, "", verify_ssl)
         if recovery:
-            _LOGGER.debug("Recovering Companion bearer token")
             await client.async_recover_bearer(code)
-            _LOGGER.info("Companion credential recovery completed")
         else:
-            _LOGGER.debug("Requesting Companion pairing challenge")
             challenge = await client.async_pair_challenge()
-            _LOGGER.debug("Submitting Companion pairing claim")
             await client.async_pair_claim(
-                challenge_id=str(challenge.get("challenge_id", "")),
-                claim_code=code,
+                challenge_id=str(challenge.get("challenge_id", "")), claim_code=code
             )
-            _LOGGER.info("Companion pairing completed")
         return {
-            CONF_DEVICE_ID: device_id,
-            CONF_COMPANION_URL: base_url,
+            CONF_DEVICE_ID: self._device_id,
+            CONF_COMPANION_URL: self._url,
             CONF_ACCESS_TOKEN: client.access_token,
-            CONF_VERIFY_SSL: verify_ssl,
+            CONF_INSTANCE_ID: self._instance_id,
         }
+
+    async def _async_finish_authorization(self, data: dict[str, Any]) -> ConfigFlowResult:
+        await self.async_set_unique_id(self._device_id)
+        if self._is_reauth:
+            self._abort_if_unique_id_mismatch()
+            return self.async_update_reload_and_abort(
+                self._get_reauth_entry(), data_updates=data
+            )
+        self._abort_if_unique_id_configured(updates={CONF_COMPANION_URL: self._url})
+        return self.async_create_entry(title=self._model or self._device_id, data=data)
 
 
 def _user_schema(user_input: Mapping[str, Any] | None) -> vol.Schema:
     user_input = user_input or {}
     return vol.Schema(
         {
-            vol.Required(CONF_DEVICE_ID, default=str(user_input.get(CONF_DEVICE_ID, ""))): str,
-            vol.Required(CONF_COMPANION_URL, default=str(user_input.get(CONF_COMPANION_URL, ""))): str,
-            vol.Required(CONF_CLAIM_CODE, default=str(user_input.get(CONF_CLAIM_CODE, ""))): str,
-            vol.Required(CONF_VERIFY_SSL, default=bool(user_input.get(CONF_VERIFY_SSL, False))): bool,
+            vol.Required(
+                CONF_COMPANION_URL, default=str(user_input.get(CONF_COMPANION_URL, ""))
+            ): str,
         }
     )
 
 
 def _claim_schema() -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_CLAIM_CODE, default=""): str,
-        }
-    )
+    return vol.Schema({vol.Required(CONF_CLAIM_CODE, default=""): str})
 
 
 def _repair_schema() -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_REPAIR_CODE, default=""): str,
-        }
-    )
+    return vol.Schema({vol.Required(CONF_REPAIR_CODE, default=""): str})
 
 
 def _normalize_url(value: str) -> str:
     value = value.strip().rstrip("/")
-    if value and "://" not in value:
-        return f"http://{value}"
-    return value
+    if not value:
+        return ""
+    if "://" not in value:
+        value = f"http://{value}"
+    parsed = urlsplit(value)
+    if parsed.port is not None or not parsed.hostname:
+        return value
+    host = parsed.hostname
+    if ":" in host:
+        host = f"[{host}]"
+    return urlunsplit((parsed.scheme, f"{host}:{DEFAULT_PORT}", parsed.path, parsed.query, parsed.fragment))
 
 
 def _zeroconf_url(host: Any, port: Any) -> str | None:

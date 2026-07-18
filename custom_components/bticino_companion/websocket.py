@@ -50,7 +50,6 @@ class CompanionWebSocket:
         session: ClientSession,
         base_url: str,
         access_token: str,
-        verify_ssl: bool,
         on_state: StateListener,
         on_event: EventListener | None = None,
         on_trace: TraceListener | None = None,
@@ -59,7 +58,6 @@ class CompanionWebSocket:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._access_token = access_token.strip()
-        self._verify_ssl = verify_ssl
         self._on_state = on_state
         self._on_event = on_event
         self._on_trace = on_trace
@@ -89,12 +87,6 @@ class CompanionWebSocket:
         """Return the last transport error."""
         return self._last_error
 
-    def update_runtime_config(self, *, base_url: str, access_token: str, verify_ssl: bool) -> None:
-        """Update connection values used by the next reconnect."""
-        self._base_url = base_url.rstrip("/")
-        self._access_token = access_token.strip()
-        self._verify_ssl = verify_ssl
-
     async def async_start(self) -> None:
         """Start the connection task."""
         if self._task is not None and not self._task.done():
@@ -117,6 +109,15 @@ class CompanionWebSocket:
             except asyncio.CancelledError:
                 pass
         self._connected.clear()
+
+    async def async_update_base_url(self, base_url: str) -> None:
+        """Reconnect to a newly discovered endpoint without unloading entities."""
+        base_url = base_url.rstrip("/")
+        if base_url == self._base_url:
+            return
+        self._base_url = base_url
+        if self._websocket is not None:
+            await self._websocket.close()
 
     async def async_wait_connected(self, timeout: float = WEBSOCKET_CONNECT_TIMEOUT_SECONDS) -> None:
         """Wait for the initial state push."""
@@ -159,7 +160,6 @@ class CompanionWebSocket:
             websocket = await self._session.ws_connect(
                 websocket_url(self._base_url),
                 headers={"Authorization": f"Bearer {self._access_token}"},
-                ssl=self._verify_ssl,
                 timeout=WEBSOCKET_CONNECT_TIMEOUT_SECONDS,
             )
         except WSServerHandshakeError as err:
