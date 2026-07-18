@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -12,10 +14,20 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import issue_registry as ir
 
 from .api import CompanionApiClient, CompanionAuthError
-from .const import CONF_ACCESS_TOKEN, CONF_COMPANION_URL, CONF_VERIFY_SSL, DOMAIN, ISSUE_CLAIM_RECOVERY, PLATFORMS
+from .const import (
+    CONF_ACCESS_TOKEN,
+    CONF_COMPANION_URL,
+    CONF_VERIFY_SSL,
+    DATA_FRONTEND_REGISTERED,
+    DOMAIN,
+    FRONTEND_PATH,
+    ISSUE_CLAIM_RECOVERY,
+    PLATFORMS,
+)
 from .coordinator import CompanionCoordinator
 from .dynamic_entities import DynamicEntityManager
 from .websocket import CompanionWebSocketError
+from .websocket_api import async_register_websocket_commands
 
 
 @dataclass(slots=True)
@@ -54,11 +66,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     entry.runtime_data = runtime
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
+    await _async_register_frontend(hass)
     dynamic_entities.async_start()
     _delete_claim_recovery_issue(hass, entry.entry_id)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Expose the bundled Lovelace card and its authenticated HA bridge once."""
+    if hass.data.get(DATA_FRONTEND_REGISTERED):
+        return
+
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(FRONTEND_PATH, str(Path(__file__).parent / "www"), cache_headers=False)]
+    )
+    async_register_websocket_commands(hass)
+    hass.data[DATA_FRONTEND_REGISTERED] = True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

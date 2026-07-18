@@ -4,6 +4,9 @@ from __future__ import annotations
 
 DOMAIN = "bticino_companion"
 NAME = "BTicino Companion"
+DATA_CAMERA_ENTITIES = f"{DOMAIN}_camera_entities"
+DATA_FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
+FRONTEND_PATH = "/bticino_companion_static"
 
 PLATFORMS: list[str] = [
     "camera",

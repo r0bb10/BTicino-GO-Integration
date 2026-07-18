@@ -14,6 +14,7 @@ from webrtc_models import RTCIceCandidateInit
 
 from . import IntegrationRuntime
 from .api import CompanionApiError
+from .const import DATA_CAMERA_ENTITIES
 from .coordinator import CompanionCoordinator
 from .device_info import device_info
 from .entity import CompanionAvailabilityMixin
@@ -85,6 +86,18 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
         self, offer_sdp: str, session_id: str, send_message: WebRTCSendMessage
     ) -> None:
         """Send Home Assistant's offer to Companion and return its SDP answer."""
+        try:
+            answer_sdp = await self.async_handle_card_webrtc_offer(offer_sdp, session_id)
+        except CompanionApiError as err:
+            send_message(WebRTCError("webrtc_offer_failed", str(err)))
+            return
+        except ValueError as err:
+            send_message(WebRTCError("webrtc_offer_failed", str(err)))
+            return
+        send_message(WebRTCAnswer(answer_sdp))
+
+    async def async_handle_card_webrtc_offer(self, offer_sdp: str, session_id: str) -> str:
+        """Create a session for the bundled card through this camera authority."""
         self._active_webrtc_sessions.add(session_id)
         try:
             response = await self._client.async_webrtc_offer(
@@ -92,25 +105,38 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
                 offer_sdp=offer_sdp,
                 session_id=session_id,
             )
-        except CompanionApiError as err:
+        except CompanionApiError:
             self._active_webrtc_sessions.discard(session_id)
-            send_message(WebRTCError("webrtc_offer_failed", str(err)))
-            return
+            raise
 
         answer_sdp = response.get("answer_sdp")
         if not isinstance(answer_sdp, str) or not answer_sdp.strip():
             self._active_webrtc_sessions.discard(session_id)
-            send_message(WebRTCError("webrtc_offer_failed", "Companion returned an empty answer_sdp"))
-            return
-        send_message(WebRTCAnswer(answer_sdp))
+            raise ValueError("Companion returned an empty answer_sdp")
+        return answer_sdp
 
     async def async_on_webrtc_candidate(
         self, session_id: str, candidate: RTCIceCandidateInit
     ) -> None:
         """Forward an ICE candidate to the matching Companion session."""
-        await self._client.async_webrtc_candidate(
-            session_id=session_id, candidate=_candidate_to_payload(candidate)
-        )
+        await self.async_handle_card_webrtc_candidate(session_id, _candidate_to_payload(candidate))
+
+    async def async_handle_card_webrtc_candidate(self, session_id: str, candidate: dict[str, Any]) -> None:
+        """Forward a bundled-card ICE candidate for one of this camera's sessions."""
+        if session_id not in self._active_webrtc_sessions:
+            raise ValueError("Unknown WebRTC session for this camera")
+        await self._client.async_webrtc_candidate(session_id=session_id, candidate=candidate)
+
+    async def async_handle_card_unlock(self) -> None:
+        """Unlock the entrypoint represented by this camera."""
+        await self._client.async_unlock_entrypoint(self._entrypoint_id)
+
+    async def async_close_card_webrtc_session(self, session_id: str) -> None:
+        """Close a bundled-card session only when it belongs to this camera."""
+        if session_id not in self._active_webrtc_sessions:
+            return
+        self._active_webrtc_sessions.remove(session_id)
+        await self._async_close_webrtc_session(session_id)
 
     @callback
     def close_webrtc_session(self, session_id: str) -> None:
@@ -129,8 +155,14 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
         except CompanionApiError as err:
             _LOGGER.debug("Unable to close Companion WebRTC session %s: %s", session_id, err)
 
+    async def async_added_to_hass(self) -> None:
+        """Make this authoritative camera discoverable by the frontend bridge."""
+        await super().async_added_to_hass()
+        self.hass.data.setdefault(DATA_CAMERA_ENTITIES, {})[self.entity_id] = self
+
     async def async_will_remove_from_hass(self) -> None:
         """Release every active Companion media session before removing the camera."""
+        self.hass.data.get(DATA_CAMERA_ENTITIES, {}).pop(self.entity_id, None)
         for session_id in tuple(self._active_webrtc_sessions):
             self.close_webrtc_session(session_id)
         await super().async_will_remove_from_hass()

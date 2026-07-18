@@ -165,6 +165,27 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(camera.available)
         self.assertTrue(camera.force_update)
 
+    async def test_camera_card_bridge_owns_and_releases_its_session(self) -> None:
+        entry = _MockEntry()
+        stream = Entrypoint.from_dict(
+            {"id": "main", "label": "Main", "capabilities": {"stream": True}, "availability": {"stream": True}}
+        )
+        camera = CompanionEntrypointCamera(
+            entry, _coordinator(_state(entrypoints=(stream,))), entry.runtime_data.client, "main", "Main"
+        )
+
+        answer = await camera.async_handle_card_webrtc_offer("offer-sdp", "session-1")
+        await camera.async_handle_card_webrtc_candidate("session-1", {"candidate": "candidate"})
+        await camera.async_close_card_webrtc_session("session-1")
+
+        self.assertEqual(answer, "answer-sdp")
+        entry.runtime_data.client.async_webrtc_candidate.assert_awaited_once_with(
+            session_id="session-1", candidate={"candidate": "candidate"}
+        )
+        entry.runtime_data.client.async_webrtc_close.assert_awaited_once_with(session_id="session-1")
+        with self.assertRaisesRegex(ValueError, "Unknown WebRTC session"):
+            await camera.async_handle_card_webrtc_candidate("session-1", {"candidate": "candidate"})
+
     async def test_camera_reports_only_its_active_stream(self) -> None:
         entry = _MockEntry()
         stream = Entrypoint.from_dict(
