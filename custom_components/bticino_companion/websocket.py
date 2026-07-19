@@ -133,6 +133,8 @@ class CompanionWebSocket:
         while not self._stop.is_set():
             try:
                 await self._async_connect_and_receive()
+                # A later close should retry promptly after a successful connection.
+                delay = WEBSOCKET_RECONNECT_MIN_SECONDS
                 raise CompanionWebSocketError("Companion WebSocket closed")
             except asyncio.CancelledError:
                 raise
