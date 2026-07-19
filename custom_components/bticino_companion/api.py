@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from aiohttp import ClientError, ClientResponse, ClientSession
+from aiohttp import ClientError, ClientResponse, ClientSession, WSMsgType
 
 from .const import (
     API_PATH_PAIR_CHALLENGE,
@@ -21,9 +21,7 @@ from .const import (
     API_PATH_UPDATE_INSTALL,
     API_PATH_VOICEMAIL_DISABLE,
     API_PATH_VOICEMAIL_ENABLE,
-    API_PATH_WEBRTC_CANDIDATE,
-    API_PATH_WEBRTC_CLOSE,
-    API_PATH_WEBRTC_OFFER,
+    API_PATH_WEBRTC_WS,
 )
 
 
@@ -51,6 +49,7 @@ class CompanionApiClient:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._access_token = access_token.strip()
+        self._webrtc_sessions: dict[str, Any] = {}
 
     @property
     def access_token(self) -> str:
@@ -130,36 +129,87 @@ class CompanionApiClient:
         )
 
     async def async_webrtc_offer(
-        self, *, entrypoint_id: str, offer_sdp: str, session_id: str
+        self, *, entrypoint_id: str, offer_sdp: str, session_id: str, origin: str
     ) -> dict[str, Any]:
-        """Create a WebRTC answer for an entrypoint stream."""
-        return await self._async_request(
-            "POST",
-            API_PATH_WEBRTC_OFFER,
-            auth=True,
-            json_body={
-                "session_id": session_id,
-                "entrypoint_id": entrypoint_id,
-                "offer_sdp": offer_sdp,
-            },
-        )
+        """Open a session-scoped WebRTC signaling socket and submit its offer."""
+        if not self._access_token:
+            raise CompanionAuthError("an access token is required")
+        if session_id in self._webrtc_sessions:
+            raise CompanionApiError("WebRTC session already exists")
+        try:
+            websocket = await self._session.ws_connect(
+                f"{self._base_url}{API_PATH_WEBRTC_WS}",
+                headers={"Authorization": f"Bearer {self._access_token}"},
+            )
+            self._webrtc_sessions[session_id] = websocket
+            response = await self._async_webrtc_message(
+                websocket,
+                "offer",
+                session_id,
+                {
+                    "session_id": session_id,
+                    "entrypoint_id": entrypoint_id,
+                    "origin": origin,
+                    "offer_sdp": offer_sdp,
+                },
+            )
+            return response
+        except ClientError as err:
+            await self._async_webrtc_discard(session_id)
+            raise CompanionApiError("unable to contact Companion") from err
+        except Exception:
+            await self._async_webrtc_discard(session_id)
+            raise
 
     async def async_webrtc_candidate(
         self, *, session_id: str, candidate: dict[str, Any]
     ) -> dict[str, Any]:
-        """Forward a Home Assistant WebRTC ICE candidate to Companion."""
-        return await self._async_request(
-            "POST",
-            API_PATH_WEBRTC_CANDIDATE,
-            auth=True,
-            json_body={"session_id": session_id, "candidate": candidate},
+        """Forward a Home Assistant WebRTC ICE candidate over its session socket."""
+        websocket = self._webrtc_sessions.get(session_id)
+        if websocket is None:
+            raise CompanionApiError("WebRTC session is not connected")
+        return await self._async_webrtc_message(
+            websocket, "candidate", session_id, {"session_id": session_id, "candidate": candidate}
         )
 
     async def async_webrtc_close(self, *, session_id: str) -> dict[str, Any]:
-        """Close a Companion WebRTC session."""
-        return await self._async_request(
-            "POST", API_PATH_WEBRTC_CLOSE, auth=True, json_body={"session_id": session_id}
-        )
+        """Close a Companion WebRTC session and its signaling socket."""
+        websocket = self._webrtc_sessions.get(session_id)
+        if websocket is None:
+            return {"session_id": session_id}
+        try:
+            return await self._async_webrtc_message(
+                websocket, "close", session_id, {"session_id": session_id, "reason": "ha_session_closed"}
+            )
+        finally:
+            await self._async_webrtc_discard(session_id)
+
+    async def _async_webrtc_message(
+        self, websocket, message_type: str, session_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        await websocket.send_json({"type": message_type, "id": session_id, "payload": payload})
+        message = await websocket.receive()
+        if message.type is not WSMsgType.TEXT:
+            raise CompanionApiError("Companion closed the WebRTC signaling socket")
+        try:
+            response = message.json()
+        except ValueError as err:
+            raise CompanionApiError("Companion returned an invalid WebRTC response") from err
+        if not isinstance(response, dict) or response.get("id") != session_id or not isinstance(response.get("payload"), dict):
+            raise CompanionApiError("Companion returned an invalid WebRTC response")
+        if response.get("type") == "error":
+            error = response["payload"]
+            raise CompanionApiError(str(error.get("message", "WebRTC signaling failed")), str(error.get("code", "webrtc_failed")))
+        if response.get("type") == "answer":
+            return response["payload"]
+        if response.get("type") == "ack":
+            return {"session_id": session_id}
+        raise CompanionApiError("Companion returned an invalid WebRTC response")
+
+    async def _async_webrtc_discard(self, session_id: str) -> None:
+        websocket = self._webrtc_sessions.pop(session_id, None)
+        if websocket is not None:
+            await websocket.close()
 
     async def async_entrypoint_snapshot_latest(self, entrypoint_id: str) -> bytes | None:
         """Return the last passive snapshot without requesting a new capture."""

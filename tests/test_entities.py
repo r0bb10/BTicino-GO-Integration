@@ -144,30 +144,9 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
             "POST", "/api/v3/system/services/dropbear/restart", auth=True
         )
 
-    async def test_webrtc_client_uses_companion_api(self) -> None:
+    async def test_webrtc_client_starts_without_sessions(self) -> None:
         client = CompanionApiClient(MagicMock(), "http://companion", "token")
-        client._async_request = AsyncMock()
-
-        await client.async_webrtc_offer(entrypoint_id="main", offer_sdp="offer", session_id="session")
-        client._async_request.assert_awaited_once_with(
-            "POST",
-            "/api/v3/webrtc/offer",
-            auth=True,
-            json_body={"session_id": "session", "entrypoint_id": "main", "offer_sdp": "offer"},
-        )
-
-        await client.async_webrtc_candidate(session_id="session", candidate={"candidate": "candidate"})
-        client._async_request.assert_awaited_with(
-            "POST",
-            "/api/v3/webrtc/candidate",
-            auth=True,
-            json_body={"session_id": "session", "candidate": {"candidate": "candidate"}},
-        )
-
-        await client.async_webrtc_close(session_id="session")
-        client._async_request.assert_awaited_with(
-            "POST", "/api/v3/webrtc/close", auth=True, json_body={"session_id": "session"}
-        )
+        self.assertEqual(client._webrtc_sessions, {})
 
     async def test_camera_forwards_companion_answer_to_frontend(self) -> None:
         entry = _MockEntry()
@@ -180,7 +159,7 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         await camera.async_handle_async_webrtc_offer("offer-sdp", "session-1", send_message)
 
         entry.runtime_data.client.async_webrtc_offer.assert_awaited_once_with(
-            entrypoint_id="main", offer_sdp="offer-sdp", session_id="session-1"
+            entrypoint_id="main", offer_sdp="offer-sdp", session_id="session-1", origin="native_camera"
         )
         self.assertEqual(send_message.call_args.args[0].answer, "answer-sdp")
         self.assertTrue(camera.available)

@@ -106,7 +106,7 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
     ) -> None:
         """Send Home Assistant's offer to Companion and return its SDP answer."""
         try:
-            answer_sdp = await self.async_handle_card_webrtc_offer(offer_sdp, session_id)
+            answer_sdp = await self._async_open_webrtc_session(offer_sdp, session_id, "native_camera")
         except CompanionApiError as err:
             send_message(WebRTCError("webrtc_offer_failed", str(err)))
             return
@@ -117,12 +117,17 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
 
     async def async_handle_card_webrtc_offer(self, offer_sdp: str, session_id: str) -> str:
         """Create a session for the bundled card through this camera authority."""
+        return await self._async_open_webrtc_session(offer_sdp, session_id, "bticino_card")
+
+    async def _async_open_webrtc_session(self, offer_sdp: str, session_id: str, origin: str) -> str:
+        """Open a server-auditable session owned by this camera."""
         self._active_webrtc_sessions.add(session_id)
         try:
             response = await self._client.async_webrtc_offer(
                 entrypoint_id=self._entrypoint_id,
                 offer_sdp=offer_sdp,
                 session_id=session_id,
+                origin=origin,
             )
         except CompanionApiError:
             self._active_webrtc_sessions.discard(session_id)
