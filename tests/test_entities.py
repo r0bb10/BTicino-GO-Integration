@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import sys
+import asyncio
 from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock, MagicMock
+
+from aiohttp import WSMsgType
 
 COMPONENT_PATH = Path(__file__).parents[1] / "custom_components"
 sys.path.insert(0, str(COMPONENT_PATH))
@@ -46,6 +49,29 @@ class _MockEntry:
 
     def async_on_unload(self, listener):
         return lambda: None
+
+
+class _SerializedWebSocket:
+    def __init__(self, responses: list[dict]) -> None:
+        self._responses = responses
+        self.active_receives = 0
+        self.max_active_receives = 0
+        self.sent: list[dict] = []
+
+    async def send_json(self, message: dict) -> None:
+        self.sent.append(message)
+
+    async def receive(self):
+        self.active_receives += 1
+        self.max_active_receives = max(self.max_active_receives, self.active_receives)
+        if self.active_receives > 1:
+            raise RuntimeError("Concurrent call to receive() is not allowed")
+        await asyncio.sleep(0)
+        self.active_receives -= 1
+        return MagicMock(type=WSMsgType.TEXT, json=lambda: self._responses.pop(0))
+
+    async def close(self) -> None:
+        return None
 
 
 def _coordinator(state: CompanionState | None = None, connected: bool = True) -> MagicMock:
@@ -147,6 +173,28 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
     async def test_webrtc_client_starts_without_sessions(self) -> None:
         client = CompanionApiClient(MagicMock(), "http://companion", "token")
         self.assertEqual(client._webrtc_sessions, {})
+
+    async def test_webrtc_candidates_are_serialized_per_session(self) -> None:
+        websocket = _SerializedWebSocket(
+            [
+                {"type": "answer", "id": "session", "payload": {"answer_sdp": "answer"}},
+                {"type": "ack", "id": "session"},
+                {"type": "ack", "id": "session"},
+            ]
+        )
+        session = MagicMock()
+        session.ws_connect = AsyncMock(return_value=websocket)
+        client = CompanionApiClient(session, "http://companion", "token")
+
+        await client.async_webrtc_offer(
+            entrypoint_id="main", offer_sdp="offer", session_id="session", origin="native_camera"
+        )
+        await asyncio.gather(
+            client.async_webrtc_candidate(session_id="session", candidate={"candidate": "one"}),
+            client.async_webrtc_candidate(session_id="session", candidate={"candidate": "two"}),
+        )
+
+        self.assertEqual(websocket.max_active_receives, 1)
 
     async def test_camera_forwards_companion_answer_to_frontend(self) -> None:
         entry = _MockEntry()

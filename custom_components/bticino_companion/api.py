@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
@@ -38,6 +39,13 @@ class CompanionAuthError(CompanionApiError):
     """Raised when a Companion request is unauthorized."""
 
 
+@dataclass
+class _WebRTCSession:
+    websocket: Any
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    closing: bool = False
+
+
 class CompanionApiClient:
     """REST operations that are not available through the WebSocket protocol."""
 
@@ -50,7 +58,7 @@ class CompanionApiClient:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._access_token = access_token.strip()
-        self._webrtc_sessions: dict[str, tuple[Any, asyncio.Lock]] = {}
+        self._webrtc_sessions: dict[str, _WebRTCSession] = {}
 
     @property
     def access_token(self) -> str:
@@ -142,7 +150,7 @@ class CompanionApiClient:
                 f"{self._base_url}{API_PATH_WEBRTC_WS}",
                 headers={"Authorization": f"Bearer {self._access_token}"},
             )
-            session = (websocket, asyncio.Lock())
+            session = _WebRTCSession(websocket)
             self._webrtc_sessions[session_id] = session
             response = await self._async_webrtc_message(
                 session,
@@ -169,7 +177,7 @@ class CompanionApiClient:
         """Forward a Home Assistant WebRTC ICE candidate over its session socket."""
         session = self._webrtc_sessions.get(session_id)
         if session is None:
-            raise CompanionApiError("WebRTC session is not connected")
+            return {"session_id": session_id, "ignored": True}
         return await self._async_webrtc_message(
             session, "candidate", session_id, {"session_id": session_id, "candidate": candidate}
         )
@@ -187,24 +195,31 @@ class CompanionApiClient:
             await self._async_webrtc_discard(session_id)
 
     async def _async_webrtc_message(
-        self, session: tuple[Any, asyncio.Lock], message_type: str, session_id: str, payload: dict[str, Any]
+        self, session: _WebRTCSession, message_type: str, session_id: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        websocket, lock = session
-        async with lock:
-            await websocket.send_json({"type": message_type, "id": session_id, "payload": payload})
-            message = await websocket.receive()
+        async with session.lock:
+            if session.closing and message_type != "close":
+                return {"session_id": session_id, "ignored": True}
+            if message_type == "close":
+                session.closing = True
+            await session.websocket.send_json({"type": message_type, "id": session_id, "payload": payload})
+            message = await session.websocket.receive()
         if message.type is not WSMsgType.TEXT:
             raise CompanionApiError("Companion closed the WebRTC signaling socket")
         try:
             response = message.json()
         except ValueError as err:
             raise CompanionApiError("Companion returned an invalid WebRTC response") from err
-        if not isinstance(response, dict) or response.get("id") != session_id or not isinstance(response.get("payload"), dict):
+        if not isinstance(response, dict) or response.get("id") != session_id:
             raise CompanionApiError("Companion returned an invalid WebRTC response")
         if response.get("type") == "error":
+            if not isinstance(response.get("payload"), dict):
+                raise CompanionApiError("Companion returned an invalid WebRTC response")
             error = response["payload"]
             raise CompanionApiError(str(error.get("message", "WebRTC signaling failed")), str(error.get("code", "webrtc_failed")))
         if response.get("type") == "answer":
+            if not isinstance(response.get("payload"), dict):
+                raise CompanionApiError("Companion returned an invalid WebRTC response")
             return response["payload"]
         if response.get("type") == "ack":
             return {"session_id": session_id}
@@ -213,8 +228,7 @@ class CompanionApiClient:
     async def _async_webrtc_discard(self, session_id: str) -> None:
         session = self._webrtc_sessions.pop(session_id, None)
         if session is not None:
-            websocket, _ = session
-            await websocket.close()
+            await session.websocket.close()
 
     async def async_entrypoint_snapshot_latest(self, entrypoint_id: str) -> bytes | None:
         """Return the last passive snapshot without requesting a new capture."""
