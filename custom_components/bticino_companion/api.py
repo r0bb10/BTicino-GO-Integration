@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from urllib.parse import quote
 
@@ -49,7 +50,7 @@ class CompanionApiClient:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._access_token = access_token.strip()
-        self._webrtc_sessions: dict[str, Any] = {}
+        self._webrtc_sessions: dict[str, tuple[Any, asyncio.Lock]] = {}
 
     @property
     def access_token(self) -> str:
@@ -141,9 +142,10 @@ class CompanionApiClient:
                 f"{self._base_url}{API_PATH_WEBRTC_WS}",
                 headers={"Authorization": f"Bearer {self._access_token}"},
             )
-            self._webrtc_sessions[session_id] = websocket
+            session = (websocket, asyncio.Lock())
+            self._webrtc_sessions[session_id] = session
             response = await self._async_webrtc_message(
-                websocket,
+                session,
                 "offer",
                 session_id,
                 {
@@ -165,30 +167,32 @@ class CompanionApiClient:
         self, *, session_id: str, candidate: dict[str, Any]
     ) -> dict[str, Any]:
         """Forward a Home Assistant WebRTC ICE candidate over its session socket."""
-        websocket = self._webrtc_sessions.get(session_id)
-        if websocket is None:
+        session = self._webrtc_sessions.get(session_id)
+        if session is None:
             raise CompanionApiError("WebRTC session is not connected")
         return await self._async_webrtc_message(
-            websocket, "candidate", session_id, {"session_id": session_id, "candidate": candidate}
+            session, "candidate", session_id, {"session_id": session_id, "candidate": candidate}
         )
 
     async def async_webrtc_close(self, *, session_id: str) -> dict[str, Any]:
         """Close a Companion WebRTC session and its signaling socket."""
-        websocket = self._webrtc_sessions.get(session_id)
-        if websocket is None:
+        session = self._webrtc_sessions.get(session_id)
+        if session is None:
             return {"session_id": session_id}
         try:
             return await self._async_webrtc_message(
-                websocket, "close", session_id, {"session_id": session_id, "reason": "ha_session_closed"}
+                session, "close", session_id, {"session_id": session_id, "reason": "ha_session_closed"}
             )
         finally:
             await self._async_webrtc_discard(session_id)
 
     async def _async_webrtc_message(
-        self, websocket, message_type: str, session_id: str, payload: dict[str, Any]
+        self, session: tuple[Any, asyncio.Lock], message_type: str, session_id: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        await websocket.send_json({"type": message_type, "id": session_id, "payload": payload})
-        message = await websocket.receive()
+        websocket, lock = session
+        async with lock:
+            await websocket.send_json({"type": message_type, "id": session_id, "payload": payload})
+            message = await websocket.receive()
         if message.type is not WSMsgType.TEXT:
             raise CompanionApiError("Companion closed the WebRTC signaling socket")
         try:
@@ -207,8 +211,9 @@ class CompanionApiClient:
         raise CompanionApiError("Companion returned an invalid WebRTC response")
 
     async def _async_webrtc_discard(self, session_id: str) -> None:
-        websocket = self._webrtc_sessions.pop(session_id, None)
-        if websocket is not None:
+        session = self._webrtc_sessions.pop(session_id, None)
+        if session is not None:
+            websocket, _ = session
             await websocket.close()
 
     async def async_entrypoint_snapshot_latest(self, entrypoint_id: str) -> bytes | None:
