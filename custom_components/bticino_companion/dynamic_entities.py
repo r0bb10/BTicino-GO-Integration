@@ -9,6 +9,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import EntityPlatform
 
@@ -106,10 +107,11 @@ class DynamicEntityManager:
             }
 
     async def _async_remove_entity(self, platform: EntityPlatform, unique_id: str) -> bool:
-        """Remove the live entity while retaining its registry preferences for re-add."""
+        """Remove an entity that the Companion no longer declares."""
         for entity_id, entity in tuple(platform.entities.items()):
             if entity.unique_id == unique_id:
                 await platform.async_remove_entity(entity_id)
+                er.async_get(self._hass).async_remove(entity_id)
                 return True
         return False
 
@@ -119,7 +121,7 @@ class DynamicEntityManager:
             return ()
 
         # Imports stay here to keep platform modules free of an import cycle.
-        from .button import CompanionEntrypointButton, CompanionRebootButton
+        from .button import CompanionEntrypointButton, CompanionRebootButton, CompanionServiceRestartButton
         from .camera import CompanionEntrypointCamera
         from .switch import CompanionVoicemailSwitch
         from .update import CompanionUpdate
@@ -164,6 +166,18 @@ class DynamicEntityManager:
                     "button",
                     f"{self._entry.unique_id}_reboot",
                     lambda: CompanionRebootButton(self._entry, self._coordinator, self._client),
+                )
+            )
+        for service in state.services:
+            if not service.enabled or not service.exposed:
+                continue
+            desired.append(
+                _DesiredEntity(
+                    "button",
+                    f"{self._entry.unique_id}_restart_{service.name}",
+                    lambda service=service: CompanionServiceRestartButton(
+                        self._entry, self._coordinator, self._client, service.name
+                    ),
                 )
             )
         if state.voicemail_enabled is not None:

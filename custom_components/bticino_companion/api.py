@@ -11,12 +11,13 @@ from .const import (
     API_PATH_PAIR_CHALLENGE,
     API_PATH_PAIR_CLAIM,
     API_PATH_RECOVER_BEARER,
-	API_PATH_SNAPSHOT_LATEST,
     API_PATH_AUDIO_MUTE,
     API_PATH_AUDIO_UNMUTE,
     API_PATH_AUTH_STATUS,
     API_PATH_ENTRYPOINT_UNLOCK,
     API_PATH_SYSTEM_REBOOT,
+    API_PATH_SYSTEM_SERVICE_RESTART,
+    API_PATH_SNAPSHOT_LATEST,
     API_PATH_UPDATE_INSTALL,
     API_PATH_VOICEMAIL_DISABLE,
     API_PATH_VOICEMAIL_ENABLE,
@@ -122,6 +123,11 @@ class CompanionApiClient:
 
     async def async_reboot(self) -> dict[str, Any]:
         return await self._async_request("POST", API_PATH_SYSTEM_REBOOT, auth=True)
+
+    async def async_restart_service(self, service: str) -> dict[str, Any]:
+        return await self._async_request(
+            "POST", API_PATH_SYSTEM_SERVICE_RESTART.format(service=quote(service, safe="")), auth=True
+        )
 
     async def async_webrtc_offer(
         self, *, entrypoint_id: str, offer_sdp: str, session_id: str

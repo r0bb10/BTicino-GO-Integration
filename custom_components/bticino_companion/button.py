@@ -83,3 +83,15 @@ class CompanionRebootButton(_CompanionButton):
 
     async def async_press(self) -> None:
         await self._client.async_reboot()
+
+
+class CompanionServiceRestartButton(_CompanionButton):
+    """Restart one Companion service through the typed REST endpoint."""
+
+    def __init__(self, entry: ConfigEntry, coordinator: CompanionCoordinator, client, service: str) -> None:
+        super().__init__(entry, coordinator, f"restart_{service}", f"Restart {service}", "mdi:restart")
+        self._client = client
+        self._service = service
+
+    async def async_press(self) -> None:
+        await self._client.async_restart_service(self._service)

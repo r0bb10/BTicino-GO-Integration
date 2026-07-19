@@ -11,12 +11,13 @@ COMPONENT_PATH = Path(__file__).parents[1] / "custom_components"
 sys.path.insert(0, str(COMPONENT_PATH))
 
 try:
-    from bticino_companion.button import CompanionEntrypointButton, CompanionRebootButton
+    from homeassistant.const import EntityCategory
+    from bticino_companion.button import CompanionEntrypointButton, CompanionRebootButton, CompanionServiceRestartButton
     from bticino_companion.camera import CompanionEntrypointCamera
     from bticino_companion.api import CompanionApiClient
     from bticino_companion.coordinator import CompanionCoordinator
     from bticino_companion.dynamic_entities import DynamicEntityManager
-    from bticino_companion.models import CompanionState, Diagnostics, Entrypoint, UpdateInfo
+    from bticino_companion.models import CompanionState, Diagnostics, Entrypoint, SystemService, UpdateInfo
     from bticino_companion.switch import CompanionMuteSwitch, CompanionVoicemailSwitch
     from bticino_companion.update import CompanionUpdate
 except ImportError as err:
@@ -37,6 +38,7 @@ class _MockEntry:
         self.runtime_data.client.async_set_voicemail_enabled = AsyncMock()
         self.runtime_data.client.async_install_update = AsyncMock()
         self.runtime_data.client.async_reboot = AsyncMock()
+        self.runtime_data.client.async_restart_service = AsyncMock()
         self.runtime_data.client.async_webrtc_offer = AsyncMock(return_value={"answer_sdp": "answer-sdp"})
         self.runtime_data.client.async_webrtc_candidate = AsyncMock()
         self.runtime_data.client.async_webrtc_close = AsyncMock()
@@ -122,6 +124,25 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         await client.async_reboot()
 
         client._async_request.assert_awaited_once_with("POST", "/api/v3/system/reboot", auth=True)
+
+    async def test_service_restart_uses_typed_rest_client(self) -> None:
+        entry = _MockEntry()
+        restart = CompanionServiceRestartButton(entry, _coordinator(), entry.runtime_data.client, "dropbear")
+
+        self.assertEqual(restart.entity_category, EntityCategory.CONFIG)
+        await restart.async_press()
+
+        entry.runtime_data.client.async_restart_service.assert_awaited_once_with("dropbear")
+
+    async def test_service_restart_client_uses_service_endpoint(self) -> None:
+        client = CompanionApiClient(MagicMock(), "http://companion", "token")
+        client._async_request = AsyncMock()
+
+        await client.async_restart_service("dropbear")
+
+        client._async_request.assert_awaited_once_with(
+            "POST", "/api/v3/system/services/dropbear/restart", auth=True
+        )
 
     async def test_webrtc_client_uses_companion_api(self) -> None:
         client = CompanionApiClient(MagicMock(), "http://companion", "token")
@@ -233,6 +254,17 @@ class _MockPlatform:
 
 
 class DynamicEntityManagerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_reconciles_exposed_service_restart_button(self) -> None:
+        entry = _MockEntry()
+        manager = DynamicEntityManager(MagicMock(), entry, _coordinator(), entry.runtime_data.client)
+
+        desired = manager._desired_entities(
+            _state(services=(SystemService(name="dropbear", enabled=True, exposed=True),))
+        )
+
+        self.assertEqual([entity.unique_id for entity in desired], ["device-123_restart_dropbear"])
+        self.assertIsInstance(desired[0].create(), CompanionServiceRestartButton)
+
     async def test_reconciles_entrypoint_capability_changes_and_readd(self) -> None:
         entry = _MockEntry()
         unlocked = Entrypoint.from_dict(
