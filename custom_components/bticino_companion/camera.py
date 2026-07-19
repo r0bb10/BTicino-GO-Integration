@@ -82,6 +82,25 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
             and state.call_state in {"preview", "active"}
         )
 
+    @property
+    def extra_state_attributes(self) -> dict[str, str | bool]:
+        """Expose entrypoint-scoped call state for the bundled dynamic card."""
+        state = self.coordinator.data
+        entrypoint = (
+            next((item for item in state.entrypoints if item.id == self._entrypoint_id), None)
+            if state
+            else None
+        )
+        active = bool(state and state.active_entrypoint_id == self._entrypoint_id)
+        call_state = state.call_state if state and active else "idle"
+        return {
+            "bticino_entrypoint_id": self._entrypoint_id,
+            "bticino_entrypoint_label": entrypoint.label if entrypoint and entrypoint.label else self._attr_name,
+            "bticino_call_state": call_state,
+            "bticino_is_active_entrypoint": active,
+            "bticino_is_ringing": call_state == "ringing",
+        }
+
     async def async_handle_async_webrtc_offer(
         self, offer_sdp: str, session_id: str, send_message: WebRTCSendMessage
     ) -> None:

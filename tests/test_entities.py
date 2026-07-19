@@ -227,6 +227,39 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         camera.coordinator.data = _state(call_state="idle", active_entrypoint_id="main", entrypoints=(stream,))
         self.assertFalse(camera.is_streaming)
 
+    async def test_camera_exposes_only_its_own_call_state(self) -> None:
+        entry = _MockEntry()
+        main = Entrypoint.from_dict(
+            {"id": "main", "label": "Main Gate", "capabilities": {"stream": True}}
+        )
+        side = Entrypoint.from_dict(
+            {"id": "side", "label": "Side Gate", "capabilities": {"stream": True}}
+        )
+        camera = CompanionEntrypointCamera(
+            entry,
+            _coordinator(_state(call_state="ringing", active_entrypoint_id="side", entrypoints=(main, side))),
+            entry.runtime_data.client,
+            "main",
+            "Main Gate",
+        )
+
+        self.assertEqual(
+            camera.extra_state_attributes,
+            {
+                "bticino_entrypoint_id": "main",
+                "bticino_entrypoint_label": "Main Gate",
+                "bticino_call_state": "idle",
+                "bticino_is_active_entrypoint": False,
+                "bticino_is_ringing": False,
+            },
+        )
+
+        camera.coordinator.data = _state(
+            call_state="ringing", active_entrypoint_id="main", entrypoints=(main, side)
+        )
+        self.assertEqual(camera.extra_state_attributes["bticino_call_state"], "ringing")
+        self.assertTrue(camera.extra_state_attributes["bticino_is_ringing"])
+
     async def test_camera_is_available_when_stream_is_configured_but_idle(self) -> None:
         entry = _MockEntry()
         stream = Entrypoint.from_dict(

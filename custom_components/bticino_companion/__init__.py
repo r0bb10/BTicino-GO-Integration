@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import CompanionApiClient, CompanionAuthError
 from .const import (
+    CARD_RESOURCE_URL,
     CONF_ACCESS_TOKEN,
     CONF_COMPANION_URL,
     DATA_FRONTEND_REGISTERED,
@@ -80,6 +81,21 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths(
         [StaticPathConfig(FRONTEND_PATH, str(Path(__file__).parent / "www"), cache_headers=False)]
     )
+    resources = hass.data["lovelace"].resources
+    if not resources.loaded:
+        await resources.async_load()
+
+    for resource in resources.async_items():
+        if not resource["url"].startswith(f"{FRONTEND_PATH}/"):
+            continue
+        if resource["url"] != CARD_RESOURCE_URL:
+            await resources.async_update_item(
+                resource["id"], {"res_type": "module", "url": CARD_RESOURCE_URL}
+            )
+        break
+    else:
+        await resources.async_create_item({"res_type": "module", "url": CARD_RESOURCE_URL})
+
     async_register_websocket_commands(hass)
     hass.data[DATA_FRONTEND_REGISTERED] = True
 
