@@ -82,7 +82,12 @@ class CompanionRebootButton(_CompanionButton):
         self._client = client
 
     async def async_press(self) -> None:
-        await self._client.async_reboot()
+        self.coordinator.async_expect_disconnect()
+        try:
+            await self._client.async_reboot()
+        except Exception:
+            self.coordinator.async_cancel_expected_disconnect()
+            raise
 
 
 class CompanionServiceRestartButton(_CompanionButton):

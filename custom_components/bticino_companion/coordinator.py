@@ -18,7 +18,7 @@ from .websocket import CompanionWebSocket
 class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
     """Own the Companion WebSocket and publish server-pushed state."""
 
-    def __init__(self, hass: HomeAssistant, client: CompanionApiClient) -> None:
+    def __init__(self, hass: HomeAssistant, client: CompanionApiClient, device_id: str) -> None:
         super().__init__(hass, logger=logging.getLogger(__name__), name=DOMAIN)
         self.client = client
         self.last_event: Mapping[str, Any] | None = None
@@ -29,6 +29,7 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
             session=client.session,
             base_url=client.base_url,
             access_token=client.access_token,
+            device_id=device_id,
             on_state=self._async_handle_state,
             on_event=self._async_handle_event,
             on_trace=self._async_handle_trace,
@@ -42,7 +43,9 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
 
     async def async_start(self) -> None:
         """Start the WebSocket and wait for its initial state."""
-        await self.websocket.async_start()
+        from homeassistant.components import zeroconf
+
+        await self.websocket.async_start(await zeroconf.async_get_instance(self.hass))
         await self.websocket.async_wait_connected()
 
     async def async_stop(self) -> None:
@@ -52,6 +55,14 @@ class CompanionCoordinator(DataUpdateCoordinator[CompanionState]):
     async def async_update_base_url(self, base_url: str) -> None:
         """Reconnect the push transport at a newly discovered endpoint."""
         await self.websocket.async_update_base_url(base_url)
+
+    def async_expect_disconnect(self) -> None:
+        """Tell the transport that a Companion reboot has been requested."""
+        self.websocket.async_expect_disconnect()
+
+    def async_cancel_expected_disconnect(self) -> None:
+        """Clear a reboot expectation after a rejected reboot request."""
+        self.websocket.async_cancel_expected_disconnect()
 
     def async_add_trace_listener(self, listener: Callable[[TraceFrame], None]) -> Callable[[], None]:
         """Register a listener for trace frames without creating another transport."""

@@ -17,6 +17,7 @@ from .const import (
     CARD_RESOURCE_URL,
     CONF_ACCESS_TOKEN,
     CONF_COMPANION_URL,
+    CONF_DEVICE_ID,
     DATA_FRONTEND_REGISTERED,
     DOMAIN,
     FRONTEND_PATH,
@@ -49,7 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         base_url=str(entry.data[CONF_COMPANION_URL]),
         access_token=str(entry.data[CONF_ACCESS_TOKEN]),
     )
-    coordinator = CompanionCoordinator(hass, client)
+    coordinator = CompanionCoordinator(hass, client, str(entry.data[CONF_DEVICE_ID]))
     try:
         await coordinator.async_start()
     except CompanionAuthError as err:
