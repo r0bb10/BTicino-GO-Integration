@@ -8,7 +8,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from aiohttp import WSMsgType
+from aiohttp import ClientError, WSMsgType
 
 COMPONENT_PATH = Path(__file__).parents[1] / "custom_components"
 sys.path.insert(0, str(COMPONENT_PATH))
@@ -17,7 +17,7 @@ try:
     from homeassistant.const import EntityCategory
     from bticino_companion.button import CompanionEntrypointButton, CompanionRebootButton, CompanionServiceRestartButton
     from bticino_companion.camera import CompanionEntrypointCamera
-    from bticino_companion.api import CompanionApiClient
+    from bticino_companion.api import CompanionApiClient, CompanionApiError
     from bticino_companion.coordinator import CompanionCoordinator
     from bticino_companion.dynamic_entities import DynamicEntityManager
     from bticino_companion.models import CompanionState, Diagnostics, Entrypoint, SystemService, UpdateInfo
@@ -195,6 +195,24 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(websocket.max_active_receives, 1)
+
+    async def test_webrtc_close_normalizes_transport_errors(self) -> None:
+        websocket = _SerializedWebSocket(
+            [{"type": "answer", "id": "session", "payload": {"answer_sdp": "answer"}}]
+        )
+        session = MagicMock()
+        session.ws_connect = AsyncMock(return_value=websocket)
+        client = CompanionApiClient(session, "http://companion", "token")
+
+        await client.async_webrtc_offer(
+            entrypoint_id="main", offer_sdp="offer", session_id="session", origin="native_camera"
+        )
+        websocket.send_json = AsyncMock(side_effect=ClientError("connection closed"))
+
+        with self.assertRaisesRegex(CompanionApiError, "unable to close Companion WebRTC session"):
+            await client.async_webrtc_close(session_id="session")
+
+        self.assertNotIn("session", client._webrtc_sessions)
 
     async def test_camera_forwards_companion_answer_to_frontend(self) -> None:
         entry = _MockEntry()

@@ -191,6 +191,8 @@ class CompanionApiClient:
             return await self._async_webrtc_message(
                 session, "close", session_id, {"session_id": session_id, "reason": "ha_session_closed"}
             )
+        except ClientError as err:
+            raise CompanionApiError("unable to close Companion WebRTC session") from err
         finally:
             await self._async_webrtc_discard(session_id)
 

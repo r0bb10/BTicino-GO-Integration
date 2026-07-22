@@ -7,7 +7,7 @@ import ipaddress
 import logging
 import re
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import voluptuous as vol
 
@@ -246,14 +246,15 @@ def _normalize_url(value: str) -> str:
     if "://" not in value:
         value = f"http://{value}"
     parsed = urlsplit(value)
+    path = parsed.path.rstrip("/")
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
         or parsed.username
         or parsed.password
-        or parsed.path not in {"", "/"}
         or parsed.query
         or parsed.fragment
+        or any(segment in {".", ".."} for segment in unquote(path).split("/"))
     ):
         return ""
     try:
@@ -261,11 +262,11 @@ def _normalize_url(value: str) -> str:
     except ValueError:
         return ""
     if port is not None:
-        return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+        return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
     host = parsed.hostname
     if ":" in host:
         host = f"[{host}]"
-    return urlunsplit((parsed.scheme, f"{host}:{DEFAULT_PORT}", "", "", ""))
+    return urlunsplit((parsed.scheme, f"{host}:{DEFAULT_PORT}", path, "", ""))
 
 
 def _zeroconf_url(host: Any, port: Any) -> str | None:
