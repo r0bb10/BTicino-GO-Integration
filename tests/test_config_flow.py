@@ -36,6 +36,18 @@ class ZeroconfUrlTest(unittest.TestCase):
         self.assertEqual(_normalize_url("http://companion.local:8081"), "http://companion.local:8081")
         self.assertEqual(_normalize_url("https://companion.local"), "https://companion.local:8080")
 
+    def test_manual_url_rejects_unsafe_or_invalid_components(self) -> None:
+        for value in (
+            "ftp://companion.local",
+            "http://user:pass@companion.local",
+            "http://companion.local/path",
+            "http://companion.local?query=value",
+            "http://companion.local#fragment",
+            "http://companion.local:not-a-port",
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(_normalize_url(value), "")
+
     def test_uses_normalized_discovered_hostname_and_port(self) -> None:
         self.assertEqual(_zeroconf_url(" Companion.Local. ", 8181), "http://companion.local:8181")
 

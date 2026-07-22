@@ -136,6 +136,10 @@ class CompanionEntrypointCamera(CompanionAvailabilityMixin, CoordinatorEntity[Co
         answer_sdp = response.get("answer_sdp")
         if not isinstance(answer_sdp, str) or not answer_sdp.strip():
             self._active_webrtc_sessions.discard(session_id)
+            try:
+                await self._client.async_webrtc_close(session_id=session_id)
+            except CompanionApiError:
+                _LOGGER.debug("Unable to close invalid Companion WebRTC session %s", session_id)
             raise ValueError("Companion returned an empty answer_sdp")
         return answer_sdp
 

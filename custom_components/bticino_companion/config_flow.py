@@ -246,12 +246,26 @@ def _normalize_url(value: str) -> str:
     if "://" not in value:
         value = f"http://{value}"
     parsed = urlsplit(value)
-    if parsed.port is not None or not parsed.hostname:
-        return value
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        return ""
+    try:
+        port = parsed.port
+    except ValueError:
+        return ""
+    if port is not None:
+        return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
     host = parsed.hostname
     if ":" in host:
         host = f"[{host}]"
-    return urlunsplit((parsed.scheme, f"{host}:{DEFAULT_PORT}", parsed.path, parsed.query, parsed.fragment))
+    return urlunsplit((parsed.scheme, f"{host}:{DEFAULT_PORT}", "", "", ""))
 
 
 def _zeroconf_url(host: Any, port: Any) -> str | None:

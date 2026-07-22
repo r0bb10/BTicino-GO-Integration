@@ -234,6 +234,23 @@ class TypedControlTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "Unknown WebRTC session"):
             await camera.async_handle_card_webrtc_candidate("session-1", {"candidate": "candidate"})
 
+    async def test_camera_closes_session_when_companion_returns_invalid_answer(self) -> None:
+        entry = _MockEntry()
+        entry.runtime_data.client.async_webrtc_offer = AsyncMock(return_value={"answer_sdp": ""})
+        stream = Entrypoint.from_dict(
+            {"id": "main", "label": "Main", "capabilities": {"stream": True}, "availability": {"stream": True}}
+        )
+        camera = CompanionEntrypointCamera(
+            entry, _coordinator(_state(entrypoints=(stream,))), entry.runtime_data.client, "main", "Main"
+        )
+
+        with self.assertRaisesRegex(ValueError, "empty answer_sdp"):
+            await camera.async_handle_card_webrtc_offer("offer-sdp", "session-1")
+
+        entry.runtime_data.client.async_webrtc_close.assert_awaited_once_with(session_id="session-1")
+        with self.assertRaisesRegex(ValueError, "Unknown WebRTC session"):
+            await camera.async_handle_card_webrtc_candidate("session-1", {"candidate": "candidate"})
+
     async def test_camera_reports_only_its_active_stream(self) -> None:
         entry = _MockEntry()
         stream = Entrypoint.from_dict(
