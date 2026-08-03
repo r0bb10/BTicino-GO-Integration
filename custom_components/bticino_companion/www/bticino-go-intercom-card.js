@@ -80,6 +80,19 @@ class BTicinoGoIntercomCard extends HTMLElement {
     };
   }
 
+  async _fetchRtcConfiguration() {
+    try {
+      const clientConfig = await this._hass.callWS({
+        type: "camera/webrtc/get_client_config",
+        entity_id: this._config.camera,
+      });
+      if (clientConfig?.configuration) return clientConfig.configuration;
+    } catch {
+      // Older Home Assistant versions may not expose camera ICE configuration.
+    }
+    return {};
+  }
+
   _newSessionId() {
     if (globalThis.crypto?.randomUUID) return `bticino-card-${globalThis.crypto.randomUUID()}`;
     if (globalThis.crypto?.getRandomValues) {
@@ -117,7 +130,7 @@ class BTicinoGoIntercomCard extends HTMLElement {
         }
       }
 
-      const pc = new RTCPeerConnection();
+      const pc = new RTCPeerConnection(await this._fetchRtcConfiguration());
       this._pc = pc;
       pc.ontrack = (event) => {
         for (const track of event.streams[0]?.getTracks() || [event.track]) {
